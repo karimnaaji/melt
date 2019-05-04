@@ -308,7 +308,8 @@ int main(int argc, char* argv[])
     debug_params.voxelScale = 0.8f;
 
     Melt::OccluderGenerationParams gen_params;
-    gen_params.voxelSize = 0.65f;
+    gen_params.voxelSize = 0.15f;
+    gen_params.fillPercentage = 0.5f;
 
     Melt::Mesh occluder = Melt::GenerateConservativeOccluder(scene.occluder_mesh, gen_params, debug_params);
 
@@ -347,7 +348,10 @@ int main(int argc, char* argv[])
         static bool show_dist = false;
         static bool show_extent = false;
         static bool show_result = true;
+        static bool show_debug_gui = false;
         {
+            debug_params.flags = 0;
+
             ImGui::SetNextWindowPos(ImVec2(0, 0));
 
             ImGuiWindowFlags options =
@@ -357,48 +361,61 @@ int main(int argc, char* argv[])
                 ImGuiWindowFlags_NoSavedSettings;
 
             ImGui::Begin("Fixed Overlay", nullptr, ImVec2(0,0), 0.3f, options);
+
+            ImGui::Checkbox("Show Debug Controls", &show_debug_gui);
             ImGui::InputFloat("Voxel Size", &gen_params.voxelSize);
-            ImGui::InputFloat("Voxel Scale", &debug_params.voxelScale);
-            ImGui::DragFloat("Alpha", &alpha, 0.0f, 1.0f);
+            ImGui::DragFloat("Fill Percentage", &gen_params.fillPercentage, 0.01f, 0.0f, 1.0f);
 
-            reload |= ImGui::InputInt("Slice X", &debug_params.sliceIndexX);
-            reload |= ImGui::InputInt("Slice Y", &debug_params.sliceIndexY);
-            reload |= ImGui::InputInt("Slice Z", &debug_params.sliceIndexZ);
-            reload |= ImGui::InputInt("Voxel X", &debug_params.voxelX);
-            reload |= ImGui::InputInt("Voxel Y", &debug_params.voxelY);
-            reload |= ImGui::InputInt("Voxel Z", &debug_params.voxelZ);
-            reload |= ImGui::InputInt("Extent Index", &debug_params.extentIndex);
-            reload |= ImGui::InputInt("Extent Max Step", &debug_params.extentMaxStep);
-            reload |= ImGui::Checkbox("Show Slice Selection", &show_slice_selection);
-            reload |= ImGui::Checkbox("Show Inner", &show_inner);
-            reload |= ImGui::Checkbox("Show Outer", &show_outer);
-            reload |= ImGui::Checkbox("Show Dist", &show_dist);
-            reload |= ImGui::Checkbox("Show Extent", &show_extent);
-            reload |= ImGui::Checkbox("Show Result", &show_result);
-
-            debug_params.flags = 0;
-
-            if (show_inner) debug_params.flags |= Melt::DebugTypeShowInner;
-            if (show_slice_selection) debug_params.flags |= Melt::DebugTypeShowSliceSelection;
-            if (show_outer) debug_params.flags |= Melt::DebugTypeShowOuter;
-            if (show_dist) debug_params.flags |= Melt::DebugTypeShowMinDistance;
-            if (show_extent) debug_params.flags |= Melt::DebugTypeShowExtent;
-            if (show_result) debug_params.flags |= Melt::DebugTypeShowResult;
-
-            ImGui::Checkbox("Depth Test", &depth_test);
-            if (ImGui::Button("Next Diagonal"))
+            if (ImGui::Button("Generate"))
             {
-                debug_params.voxelX++;
-                debug_params.voxelY++;
-                debug_params.voxelZ++;
                 reload = true;
             }
-            if (ImGui::Button("Previous Diagonal"))
+
+            if (show_debug_gui)
             {
-                debug_params.voxelX--;
-                debug_params.voxelY--;
-                debug_params.voxelZ--;
-                reload = true;
+                ImGui::InputFloat("Voxel Scale", &debug_params.voxelScale);
+                ImGui::DragFloat("Alpha", &alpha, 0.01f, 0.0f, 1.0f);
+
+                ImGui::InputInt("Slice X", &debug_params.sliceIndexX);
+                ImGui::InputInt("Slice Y", &debug_params.sliceIndexY);
+                ImGui::InputInt("Slice Z", &debug_params.sliceIndexZ);
+                ImGui::InputInt("Voxel X", &debug_params.voxelX);
+                ImGui::InputInt("Voxel Y", &debug_params.voxelY);
+                ImGui::InputInt("Voxel Z", &debug_params.voxelZ);
+                ImGui::InputInt("Extent Index", &debug_params.extentIndex);
+                ImGui::InputInt("Extent Max Step", &debug_params.extentMaxStep);
+                ImGui::Checkbox("Show Slice Selection", &show_slice_selection);
+                ImGui::Checkbox("Show Inner", &show_inner);
+                ImGui::Checkbox("Show Outer", &show_outer);
+                ImGui::Checkbox("Show Dist", &show_dist);
+                ImGui::Checkbox("Show Extent", &show_extent);
+                ImGui::Checkbox("Show Result", &show_result);
+
+                if (show_inner) debug_params.flags |= Melt::DebugTypeShowInner;
+                if (show_slice_selection) debug_params.flags |= Melt::DebugTypeShowSliceSelection;
+                if (show_outer) debug_params.flags |= Melt::DebugTypeShowOuter;
+                if (show_dist) debug_params.flags |= Melt::DebugTypeShowMinDistance;
+                if (show_extent) debug_params.flags |= Melt::DebugTypeShowExtent;
+                if (show_result) debug_params.flags |= Melt::DebugTypeShowResult;
+
+                ImGui::Checkbox("Depth Test", &depth_test);
+                if (ImGui::Button("Next Diagonal"))
+                {
+                    debug_params.voxelX++;
+                    debug_params.voxelY++;
+                    debug_params.voxelZ++;
+                }
+                if (ImGui::Button("Previous Diagonal"))
+                {
+                    debug_params.voxelX--;
+                    debug_params.voxelY--;
+                    debug_params.voxelZ--;
+                }
+            }
+            else
+            {
+                debug_params.extentIndex = -1;
+                debug_params.flags |= Melt::DebugTypeShowResult;
             }
             ImGui::End();
         }

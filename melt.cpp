@@ -794,6 +794,32 @@ static void AddVoxelSetToMesh(const VoxelSet& voxel_set, const vec3& half_voxel_
     }
 }
 
+static MaxExtent GetMaxExtent(const Context& context, const VoxelField& voxel_field, const MinDistanceField& distance_field)
+{
+    MaxExtent max_extent;
+    max_extent.extent = uvec3(0);
+    max_extent.position = uvec3(0);
+    max_extent.volume = 0;
+
+    for (auto& min_distance : distance_field)
+    {
+        VoxelStatus voxel_status = voxel_field[Flatten(min_distance.position, context.dimension)];
+        if (InnerVoxel(voxel_status))
+        {
+            uvec3 extent = GetMaxAABBExtent(context, distance_field, voxel_field, min_distance);
+            u32 volume = extent.x * extent.y * extent.z;
+            if (volume > max_extent.volume)
+            {
+                max_extent.extent = extent;
+                max_extent.position = min_distance.position;
+                max_extent.volume = max_extent.extent.x * max_extent.extent.y * max_extent.extent.z;
+            }
+        }
+    }
+
+    return max_extent;
+}
+
 Mesh GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationParams& gen_params, const DebugParams& debug_params)
 {
     Mesh result;
@@ -869,38 +895,47 @@ Mesh GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
     _Debug_ValidateMinDistanceField(context, outer_voxels, voxel_field, min_distance_field);
 
     std::vector<MaxExtent> max_extents;
-    for (u32 i = 0; i < debug_params.extentMaxStep; ++i)
+    if (debug_params.extentMaxStep != 0)
     {
-        MaxExtent max_extent;
+        for (u32 i = 0; i < debug_params.extentMaxStep; ++i)
+        {
+            MaxExtent max_extent = GetMaxExtent(context, voxel_field, min_distance_field);
 
-        max_extent.extent.x = 0;
-        max_extent.extent.y = 0;
-        max_extent.extent.z = 0;
-        max_extent.volume = 0;
+            ClipVoxelField(context, max_extent.position, max_extent.extent, voxel_field);
+            UpdateMinDistanceField(context, max_extent.position, max_extent.extent, voxel_field, min_distance_field);
+
+            _Debug_ValidateMinDistanceField(context, outer_voxels, voxel_field, min_distance_field);
+
+            max_extents.push_back(max_extent);
+        }
+    }
+    else
+    {
+        u32 volume = 0;
+        u32 total_volume = 0;
+        f32 fillPercentage = 0.0f;
 
         for (auto& min_distance : min_distance_field)
         {
             VoxelStatus voxel_status = voxel_field[Flatten(min_distance.position, context.dimension)];
             if (InnerVoxel(voxel_status))
-            {
-                uvec3 extent = GetMaxAABBExtent(context, min_distance_field, voxel_field, min_distance);
-                u32 volume = extent.x * extent.y * extent.z;
-                if (volume > max_extent.volume)
-                {
-                    max_extent.extent = extent;
-                    max_extent.position = min_distance.position;
-                    max_extent.volume = max_extent.extent.x * max_extent.extent.y * max_extent.extent.z;
-                }
-            }
+                ++total_volume;
         }
 
-        ClipVoxelField(context, max_extent.position, max_extent.extent, voxel_field);
+        while (fillPercentage < gen_params.fillPercentage && volume != total_volume)
+        {
+            MaxExtent max_extent = GetMaxExtent(context, voxel_field, min_distance_field);
 
-        UpdateMinDistanceField(context, max_extent.position, max_extent.extent, voxel_field, min_distance_field);
+            ClipVoxelField(context, max_extent.position, max_extent.extent, voxel_field);
+            UpdateMinDistanceField(context, max_extent.position, max_extent.extent, voxel_field, min_distance_field);
 
-        _Debug_ValidateMinDistanceField(context, outer_voxels, voxel_field, min_distance_field);
+            _Debug_ValidateMinDistanceField(context, outer_voxels, voxel_field, min_distance_field);
 
-        max_extents.push_back(max_extent);
+            max_extents.push_back(max_extent);
+
+            fillPercentage += f32(max_extent.volume) / total_volume;
+            volume += max_extent.volume;
+        }
     }
 
     _Debug_ValidateMaxExtents(max_extents, outer_voxels);

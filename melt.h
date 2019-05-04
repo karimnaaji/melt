@@ -58,6 +58,7 @@ struct OccluderGenerationParams
     OccluderBoxTypeFlags flags;
 
     float voxelSize;
+    float fillPercentage;
 };
 
 enum DebugType
