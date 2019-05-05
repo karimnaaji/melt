@@ -116,7 +116,7 @@ static bool LoadScene(const char* model_path, Scene& out_scene)
         for (size_t f = 0; f < shapes[i].mesh.indices.size(); f++) 
         {
             float* position = &shapes[i].mesh.positions[shapes[i].mesh.indices[f] * 3];
-            buffer_data[output_index++] = *reinterpret_cast<glm::vec3*>(&p);
+            buffer_data[output_index++] = *reinterpret_cast<glm::vec3*>(&position);
             buffer_data[output_index++] = glm::vec3(1.0f, 0.5f, 0.5f);
         }
     }
