@@ -9,9 +9,8 @@
 #include "imgui_draw.cpp"
 #include "imgui_impl_glfw_gl3.cpp"
 
-#define YO_IMPLEMENTATION
-#define YO_NOIMG
-#include "deps/yocto_obj.h"
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "tiny_obj_loader.h"
 
 #include "melt.h"
 
@@ -35,7 +34,7 @@ struct Camera
     glm::vec3 position;
 };
 
-static bool LoadScene(const char* mode_path, Scene& out_scene)
+static bool LoadScene(const char* model_path, Scene& out_scene)
 {
     GLchar* vertex_source = (GLchar*)R"END(
         #version 150
@@ -92,49 +91,61 @@ static bool LoadScene(const char* mode_path, Scene& out_scene)
     out_scene.u_modelViewProjection = glGetUniformLocation(out_scene.program, "u_modelViewProjection");
     out_scene.u_alpha = glGetUniformLocation(out_scene.program, "u_alpha");
 
-    yo_scene* yo = yo_load_obj(mode_path, true, false);
-    if (!yo || !yo->nshapes)
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
+    std::string error;
+    bool obj_parsing_res = tinyobj::LoadObj(shapes, materials, error, model_path, NULL);
+
+    if (!error.empty()) 
     {
-        fprintf(stderr, "Error loading obj file\n");
+        fprintf(stderr, "%s\n", error.c_str());
         return false;
     }
 
-    out_scene.nvertices = 0;
-    for (int i = 0; i < yo->nshapes; i++)
-        out_scene.nvertices += yo->shapes[i].nelems * 3;
+    if (!obj_parsing_res)
+        return false;    
 
-    const size_t vertex_size = sizeof(glm::vec3) * 2;
-    glm::vec3* buffer_data = (glm::vec3*)calloc(out_scene.nvertices, vertex_size);
+    out_scene.nvertices = 0;
+    for (size_t i = 0; i < shapes.size(); i++) 
+        out_scene.nvertices += shapes[i].mesh.indices.size();
 
     int output_index = 0;
-    int input_index = 0;
-    for (int i = 0; i < yo->nshapes; i++)
+    glm::vec3* buffer_data = new glm::vec3[out_scene.nvertices * 2];
+    for (size_t i = 0; i < shapes.size(); i++) 
     {
-        yo_shape* shape = yo->shapes + i;
-        for (int j = 0; j < shape->nelems * 3; j++)
+        for (size_t f = 0; f < shapes[i].mesh.indices.size(); f++) 
         {
-            glm::vec3 position = *(glm::vec3*)&shape->pos[shape->elem[j] * 3];
-            buffer_data[output_index++] = position;
+            float* position = &shapes[i].mesh.positions[shapes[i].mesh.indices[f] * 3];
+            buffer_data[output_index++] = *reinterpret_cast<glm::vec3*>(&p);
             buffer_data[output_index++] = glm::vec3(1.0f, 0.5f, 0.5f);
-            out_scene.occluder_mesh.vertices.push_back(position);
-            out_scene.occluder_mesh.indices.push_back(input_index + j);
         }
-        input_index += shape->nelems * 3;
     }
-    yo_free_scene(yo);
+    for (size_t i = 0; i < shapes.size(); i++) 
+    {
+        for (size_t f = 0; f < shapes[i].mesh.indices.size(); f++) 
+            out_scene.occluder_mesh.indices.push_back(shapes[i].mesh.indices[f]);
+
+        for (size_t v = 0; v < shapes[i].mesh.positions.size() / 3; v++) 
+        {
+            out_scene.occluder_mesh.vertices.emplace_back();
+            out_scene.occluder_mesh.vertices.back().x = shapes[i].mesh.positions[3 * v + 0];
+            out_scene.occluder_mesh.vertices.back().y = shapes[i].mesh.positions[3 * v + 1];
+            out_scene.occluder_mesh.vertices.back().z = shapes[i].mesh.positions[3 * v + 2];
+        }
+    }
 
     glGenVertexArrays(1, &out_scene.vao);
     glBindVertexArray(out_scene.vao);
     glGenBuffers(1, &out_scene.vbo);
     glBindBuffer(GL_ARRAY_BUFFER, out_scene.vbo);
 
-    glBufferData(GL_ARRAY_BUFFER, out_scene.nvertices * vertex_size, buffer_data, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, out_scene.nvertices * sizeof(glm::vec3) * 2, buffer_data, GL_STATIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)0);
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 3));
 
-    free(buffer_data);
+    delete[] buffer_data;
 
     return true;
 }

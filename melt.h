@@ -30,7 +30,7 @@
 
 #ifndef MELT_ASSERT
 #include <cassert>
-#define MELT_ASSERT(stmt) assert(stmt)
+#define MELT_ASSERT(stmt) (stmt) //assert(stmt)
 #endif
 
 namespace Melt
