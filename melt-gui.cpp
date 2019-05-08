@@ -110,13 +110,13 @@ static bool LoadScene(const char* model_path, Scene& out_scene)
         out_scene.nvertices += shapes[i].mesh.indices.size();
 
     int output_index = 0;
-    glm::vec3* buffer_data = new glm::vec3[out_scene.nvertices * 2];
+    auto buffer_data = new glm::vec3[out_scene.nvertices * 2];
     for (size_t i = 0; i < shapes.size(); i++) 
     {
         for (size_t f = 0; f < shapes[i].mesh.indices.size(); f++) 
         {
-            float* position = &shapes[i].mesh.positions[shapes[i].mesh.indices[f] * 3];
-            buffer_data[output_index++] = *reinterpret_cast<glm::vec3*>(&position);
+            auto position = &shapes[i].mesh.positions[shapes[i].mesh.indices[f] * 3];
+            buffer_data[output_index++] = *reinterpret_cast<glm::vec3*>(position);
             buffer_data[output_index++] = glm::vec3(1.0f, 0.5f, 0.5f);
         }
     }

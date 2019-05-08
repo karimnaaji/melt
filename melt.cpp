@@ -843,6 +843,7 @@ Mesh GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
     VoxelSet outer_voxels;
     outer_voxels.reserve(context.size);
 
+    // Perform shell voxelization
     for (u32 i = 0; i < mesh.indices.size(); i += 3)
     {
         Triangle triangle;
@@ -853,6 +854,7 @@ Mesh GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
 
         AABB triangle_aabb = GenerateAABB(triangle);
 
+        // Voxel snapping, snap the triangle extent to find the 3d grid to iterate on.
         triangle_aabb.min = MapToVoxelMinBound(triangle_aabb.min, gen_params.voxelSize) - voxel_extent;
         triangle_aabb.max = MapToVoxelMaxBound(triangle_aabb.max, gen_params.voxelSize) + voxel_extent;
 
@@ -886,10 +888,20 @@ Mesh GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
         }
     }
 
+    // The minimum distance field is a data structure representing, for each voxel,
+    // the minimum distance that we can go in each of the positive directions x, y,
+    // z until we collide with a shell voxel. The voxel field is a data structure
+    // representing the state of the voxels. The clip status is a representation of
+    // whether a voxel is in the clip state, whether a voxel can 'see' a voxel in
+    // each of the directions +x,-x,+y,-y,+z,-z, and whether the voxel is an 'inner'
+    // voxel (contained within the shell voxels).
+
     MinDistanceField min_distance_field(context.size);
+
     VoxelField voxel_field(context.size);
 
-    // Generate the minimum distance field, clip status, and inner voxels selection
+    // Generate the minimum distance field, and voxel status from the initial shell.
+
     GenerateFields(context, outer_voxels, voxel_field, min_distance_field);
 
     _Debug_ValidateMinDistanceField(context, outer_voxels, voxel_field, min_distance_field);
@@ -902,6 +914,7 @@ Mesh GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
             MaxExtent max_extent = GetMaxExtent(context, voxel_field, min_distance_field);
 
             ClipVoxelField(context, max_extent.position, max_extent.extent, voxel_field);
+
             UpdateMinDistanceField(context, max_extent.position, max_extent.extent, voxel_field, min_distance_field);
 
             _Debug_ValidateMinDistanceField(context, outer_voxels, voxel_field, min_distance_field);
@@ -915,18 +928,29 @@ Mesh GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
         u32 total_volume = 0;
         f32 fillPercentage = 0.0f;
 
+        // Approximate the volume of the mesh by the number of voxels that can fit within.
         for (auto& min_distance : min_distance_field)
         {
             VoxelStatus voxel_status = voxel_field[Flatten(min_distance.position, context.dimension)];
+
+            // Each inner voxel adds one unit to the volume.
             if (InnerVoxel(voxel_status))
                 ++total_volume;
         }
 
+        // One iteration to find an extent does the following:
+        // . Get the extent that maximizes the volume considering the minimum distance
+        //    field
+        // . Clip the max extent found to the set of inner voxels
+        // . Update the minimum distance field by adjusting the distances on the set
+        //    of inner voxels. This is done by extending the extent cube to infinity
+        //    on each of the axes +x, +y, +z
         while (fillPercentage < gen_params.fillPercentage && volume != total_volume)
         {
             MaxExtent max_extent = GetMaxExtent(context, voxel_field, min_distance_field);
 
             ClipVoxelField(context, max_extent.position, max_extent.extent, voxel_field);
+
             UpdateMinDistanceField(context, max_extent.position, max_extent.extent, voxel_field, min_distance_field);
 
             _Debug_ValidateMinDistanceField(context, outer_voxels, voxel_field, min_distance_field);
