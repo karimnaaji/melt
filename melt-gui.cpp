@@ -14,6 +14,8 @@
 
 #include "melt.h"
 
+#include <chrono>
+
 struct ModelMesh
 {
     GLuint Program;
@@ -363,7 +365,13 @@ int main(int argc, char* argv[])
     Melt::Mesh occluder_mesh;
     ModelMesh model_mesh;
 
+    auto start = std::chrono::high_resolution_clock::now();
+
     ComputeMeshConservativeOcclusion(argv[1], debug_params, gen_params, occluder_mesh, model_mesh);
+
+    auto end = std::chrono::high_resolution_clock::now();
+        auto timing = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        printf("Total time: %lld\n", timing);
     
     OcclusionContext occlusion_context;
     occlusion_context.debug_params = &debug_params;
@@ -375,11 +383,17 @@ int main(int argc, char* argv[])
     {
         const OcclusionContext& occlusion_context = *(OcclusionContext*)glfwGetWindowUserPointer(window);
 
+        auto start = std::chrono::high_resolution_clock::now();
+
         ComputeMeshConservativeOcclusion(paths[0],
             *occlusion_context.debug_params,
             *occlusion_context.gen_params,
             *occlusion_context.occluder_mesh,
             *occlusion_context.model_mesh);
+
+        auto end = std::chrono::high_resolution_clock::now();
+        auto timing = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        printf("Total time: %lldms\n", timing);
     });
 
     SetupIMGUIStyle();
