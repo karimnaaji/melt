@@ -14,18 +14,24 @@
 
 #include "melt.h"
 
-struct Scene
+struct ModelMesh
 {
-    GLuint program;
-    GLuint vao;
-    GLuint vbo;
-    GLuint occ_vao;
-    GLuint occ_vbo;
-    GLuint occ_indices;
-    GLint u_modelViewProjection;
-    GLint u_alpha;
-    int nvertices;
-    Melt::Mesh occluder_mesh;
+    GLuint Program;
+    struct
+    {
+        GLuint vao;
+        GLuint vbo;
+    } MeshBuffer;
+    struct
+    {
+        GLuint vao;
+        GLuint vbo;
+        GLuint indices;
+    } OccluderBuffer;
+    GLint ModelViewProjection;
+    GLint Alpha;
+    int VertexCount;
+    Melt::Mesh InputMesh;
 };
 
 struct Camera
@@ -34,17 +40,17 @@ struct Camera
     glm::vec3 position;
 };
 
-static bool LoadScene(const char* model_path, Scene& out_scene)
+static bool LoadModelMesh(const char* model_path, ModelMesh& out_model_mesh, std::vector<glm::vec3>& out_buffer_data)
 {
     GLchar* vertex_source = (GLchar*)R"END(
         #version 150
         in vec3 position;
         in vec3 color;
-        uniform mat4 u_modelViewProjection;
+        uniform mat4 ModelViewProjection;
         out vec3 f_normal;
         out vec3 f_color;
         void main(void) {
-            gl_Position = u_modelViewProjection * vec4(position, 1.0);
+            gl_Position = ModelViewProjection * vec4(position, 1.0);
             f_color = color;
         }
     )END";
@@ -53,9 +59,9 @@ static bool LoadScene(const char* model_path, Scene& out_scene)
         #version 150
         in vec3 f_color;
         out vec4 color;
-        uniform float u_alpha;
+        uniform float alpha;
         void main(void) {
-            color = vec4(f_color, u_alpha);
+            color = vec4(f_color, alpha);
         }
     )END";
 
@@ -73,23 +79,23 @@ static bool LoadScene(const char* model_path, Scene& out_scene)
     glGetShaderiv(fragment_id, GL_COMPILE_STATUS, &is_compiled);
     assert(is_compiled && "Fragment shader complation failed");
 
-    out_scene.program = glCreateProgram();
+    out_model_mesh.Program = glCreateProgram();
 
-    glAttachShader(out_scene.program, vertex_id);
-    glAttachShader(out_scene.program, fragment_id);
+    glAttachShader(out_model_mesh.Program, vertex_id);
+    glAttachShader(out_model_mesh.Program, fragment_id);
 
-    glBindAttribLocation(out_scene.program, 0, "position");
-    glBindAttribLocation(out_scene.program, 1, "color");
+    glBindAttribLocation(out_model_mesh.Program, 0, "position");
+    glBindAttribLocation(out_model_mesh.Program, 1, "color");
 
-    glLinkProgram(out_scene.program);
-    glGetProgramiv(out_scene.program, GL_LINK_STATUS, &is_linked);
+    glLinkProgram(out_model_mesh.Program);
+    glGetProgramiv(out_model_mesh.Program, GL_LINK_STATUS, &is_linked);
     assert(is_linked && "Program link failed");
 
     glDeleteShader(vertex_id);
     glDeleteShader(fragment_id);
 
-    out_scene.u_modelViewProjection = glGetUniformLocation(out_scene.program, "u_modelViewProjection");
-    out_scene.u_alpha = glGetUniformLocation(out_scene.program, "u_alpha");
+    out_model_mesh.ModelViewProjection = glGetUniformLocation(out_model_mesh.Program, "ModelViewProjection");
+    out_model_mesh.Alpha = glGetUniformLocation(out_model_mesh.Program, "alpha");
 
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
@@ -105,47 +111,37 @@ static bool LoadScene(const char* model_path, Scene& out_scene)
     if (!obj_parsing_res)
         return false;    
 
-    out_scene.nvertices = 0;
+    out_model_mesh.VertexCount = 0;
     for (size_t i = 0; i < shapes.size(); i++) 
-        out_scene.nvertices += shapes[i].mesh.indices.size();
+        out_model_mesh.VertexCount += shapes[i].mesh.indices.size();
 
     int output_index = 0;
-    auto buffer_data = new glm::vec3[out_scene.nvertices * 2];
+    out_buffer_data.resize(out_model_mesh.VertexCount * 2);
     for (size_t i = 0; i < shapes.size(); i++) 
     {
         for (size_t f = 0; f < shapes[i].mesh.indices.size(); f++) 
         {
             auto position = &shapes[i].mesh.positions[shapes[i].mesh.indices[f] * 3];
-            buffer_data[output_index++] = *reinterpret_cast<glm::vec3*>(position);
-            buffer_data[output_index++] = glm::vec3(1.0f, 0.5f, 0.5f);
+            out_buffer_data[output_index++] = *reinterpret_cast<glm::vec3*>(position);
+            out_buffer_data[output_index++] = glm::vec3(1.0f, 0.5f, 0.5f);
         }
     }
+    
+    out_model_mesh.InputMesh.vertices.clear();
+    out_model_mesh.InputMesh.indices.clear();
     for (size_t i = 0; i < shapes.size(); i++) 
     {
         for (size_t f = 0; f < shapes[i].mesh.indices.size(); f++) 
-            out_scene.occluder_mesh.indices.push_back(shapes[i].mesh.indices[f]);
+            out_model_mesh.InputMesh.indices.push_back(shapes[i].mesh.indices[f]);
 
         for (size_t v = 0; v < shapes[i].mesh.positions.size() / 3; v++) 
         {
-            out_scene.occluder_mesh.vertices.emplace_back();
-            out_scene.occluder_mesh.vertices.back().x = shapes[i].mesh.positions[3 * v + 0];
-            out_scene.occluder_mesh.vertices.back().y = shapes[i].mesh.positions[3 * v + 1];
-            out_scene.occluder_mesh.vertices.back().z = shapes[i].mesh.positions[3 * v + 2];
+            out_model_mesh.InputMesh.vertices.emplace_back();
+            out_model_mesh.InputMesh.vertices.back().x = shapes[i].mesh.positions[3 * v + 0];
+            out_model_mesh.InputMesh.vertices.back().y = shapes[i].mesh.positions[3 * v + 1];
+            out_model_mesh.InputMesh.vertices.back().z = shapes[i].mesh.positions[3 * v + 2];
         }
     }
-
-    glGenVertexArrays(1, &out_scene.vao);
-    glBindVertexArray(out_scene.vao);
-    glGenBuffers(1, &out_scene.vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, out_scene.vbo);
-
-    glBufferData(GL_ARRAY_BUFFER, out_scene.nvertices * sizeof(glm::vec3) * 2, buffer_data, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)0);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 3));
-
-    delete[] buffer_data;
 
     return true;
 }
@@ -271,14 +267,60 @@ static void SetupIMGUIStyle()
 #endif
 }
 
+static bool ComputeMeshConservativeOcclusion(const char* mesh_path, const Melt::DebugParams& debug_params, const Melt::OccluderGenerationParams& gen_params, Melt::Mesh& out_occluder, ModelMesh& out_mesh)
+{
+    if (out_mesh.MeshBuffer.vao)
+        glDeleteVertexArrays(1, &out_mesh.MeshBuffer.vao);
+    if (out_mesh.MeshBuffer.vbo)
+        glDeleteBuffers(1, &out_mesh.MeshBuffer.vbo);
+    if (out_mesh.OccluderBuffer.vao)
+        glDeleteVertexArrays(1, &out_mesh.OccluderBuffer.vao);
+    if (out_mesh.OccluderBuffer.vbo)
+        glDeleteBuffers(1, &out_mesh.OccluderBuffer.vbo);
+    if (out_mesh.OccluderBuffer.indices)
+        glDeleteBuffers(1, &out_mesh.OccluderBuffer.indices);
+    if (out_mesh.Program)
+        glDeleteProgram(out_mesh.Program);
+
+    std::vector<glm::vec3> buffer_data;
+    bool model_loaded = LoadModelMesh(mesh_path, out_mesh, buffer_data);
+    if (!model_loaded)
+        return false;
+    
+    glGenVertexArrays(1, &out_mesh.MeshBuffer.vao);
+    glBindVertexArray(out_mesh.MeshBuffer.vao);
+    glGenBuffers(1, &out_mesh.MeshBuffer.vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, out_mesh.MeshBuffer.vbo);
+
+    glBufferData(GL_ARRAY_BUFFER, out_mesh.VertexCount * sizeof(glm::vec3) * 2, buffer_data.data(), GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 3));
+
+    Melt::GenerateConservativeOccluder(out_mesh.InputMesh, gen_params, debug_params, out_occluder);
+
+    glGenVertexArrays(1, &out_mesh.OccluderBuffer.vao);
+    glBindVertexArray(out_mesh.OccluderBuffer.vao);
+    
+    glGenBuffers(1, &out_mesh.OccluderBuffer.vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, out_mesh.OccluderBuffer.vbo);
+    glBufferData(GL_ARRAY_BUFFER, out_occluder.vertices.size() * sizeof(glm::vec3), out_occluder.vertices.data(), GL_STATIC_DRAW);
+    
+    glGenBuffers(1, &out_mesh.OccluderBuffer.indices);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, out_mesh.OccluderBuffer.indices);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, out_occluder.indices.size() * sizeof(GLushort), out_occluder.indices.data(), GL_STATIC_DRAW);
+    
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 3));
+    
+    return true;
+}
+
 int main(int argc, char* argv[])
 {
-    if (argc < 2)
-    {
-        fprintf(stderr, "Please provide an obj model path\n");
-        return 1;
-    }
-
     glfwSetErrorCallback(ErrorCallback);
 
     if (!glfwInit())
@@ -293,52 +335,52 @@ int main(int argc, char* argv[])
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_SAMPLES, 4);
 
-    GLFWwindow *window = glfwCreateWindow(920, 720, "", NULL, NULL);
-    if (!window)
+    GLFWwindow* window = glfwCreateWindow(920, 720, "", NULL, NULL);
+    assert(window && "Window creation failed");
+    
+    struct OcclusionContext
     {
-        fprintf(stderr, "Window creation failed\n");
-        return 1;
-    }
+        Melt::DebugParams* debug_params;
+        Melt::OccluderGenerationParams* gen_params;
+        Melt::Mesh* occluder_mesh;
+        ModelMesh* model_mesh;
+    };
 
     glfwMakeContextCurrent(window);
     gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
     glfwSwapInterval(1);
 
     ImGui_ImplGlfwGL3_Init(window, true);
-
-    Scene scene;
-    bool success = LoadScene(argv[1], scene);
-    if (!success)
-    {
-        fprintf(stderr, "Failed to load scene\n");
-        return 1;
-    }
-
+    
     Melt::DebugParams debug_params;
     std::memset(&debug_params, 0, sizeof(Melt::DebugParams));
     debug_params.voxelScale = 0.8f;
-
+    
     Melt::OccluderGenerationParams gen_params;
-    gen_params.voxelSize = 0.15f;
-    gen_params.fillPercentage = 0.5f;
+    gen_params.voxelSize = 0.25f;
+    gen_params.fillPercentage = 1.0f;
+    
+    Melt::Mesh occluder_mesh;
+    ModelMesh model_mesh;
 
-    Melt::Mesh occluder = Melt::GenerateConservativeOccluder(scene.occluder_mesh, gen_params, debug_params);
+    ComputeMeshConservativeOcclusion(argv[1], debug_params, gen_params, occluder_mesh, model_mesh);
+    
+    OcclusionContext occlusion_context;
+    occlusion_context.debug_params = &debug_params;
+    occlusion_context.gen_params = &gen_params;
+    occlusion_context.occluder_mesh = &occluder_mesh;
+    occlusion_context.model_mesh = &model_mesh;
+    glfwSetWindowUserPointer(window, &occlusion_context);
+    glfwSetDropCallback(window, [](GLFWwindow* window, int count, const char** paths)
+    {
+        const OcclusionContext& occlusion_context = *(OcclusionContext*)glfwGetWindowUserPointer(window);
 
-    glGenVertexArrays(1, &scene.occ_vao);
-    glBindVertexArray(scene.occ_vao);
-
-    glGenBuffers(1, &scene.occ_vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, scene.occ_vbo);
-    glBufferData(GL_ARRAY_BUFFER, occluder.vertices.size() * sizeof(glm::vec3), occluder.vertices.data(), GL_STATIC_DRAW);
-
-    glGenBuffers(1, &scene.occ_indices);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, scene.occ_indices);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, occluder.indices.size() * sizeof(GLushort), occluder.indices.data(), GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)0);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 3));
+        ComputeMeshConservativeOcclusion(paths[0],
+            *occlusion_context.debug_params,
+            *occlusion_context.gen_params,
+            *occlusion_context.occluder_mesh,
+            *occlusion_context.model_mesh);
+    });
 
     SetupIMGUIStyle();
 
@@ -456,27 +498,27 @@ int main(int argc, char* argv[])
             glm::mat4 projection = glm::perspective(glm::radians(fov), float(width) / height, 0.01f, 100.0f);
             glm::mat4 viewProjection = projection * camera.view;
 
-            glUseProgram(scene.program);
+            glUseProgram(model_mesh.Program);
 
-            glUniformMatrix4fv(scene.u_modelViewProjection, 1, GL_FALSE, glm::value_ptr(viewProjection));
-            glUniform1f(scene.u_alpha, alpha);
+            glUniformMatrix4fv(model_mesh.ModelViewProjection, 1, GL_FALSE, glm::value_ptr(viewProjection));
+            glUniform1f(model_mesh.Alpha, alpha);
 
-            glBindVertexArray(scene.vao);
-            glDrawArrays(GL_TRIANGLES, 0, scene.nvertices);
+            glBindVertexArray(model_mesh.MeshBuffer.vao);
+            glDrawArrays(GL_TRIANGLES, 0, model_mesh.VertexCount);
 
-            glBindVertexArray(scene.occ_vao);
-            glDrawElements(GL_TRIANGLES, occluder.indices.size(), GL_UNSIGNED_SHORT, 0);
+            glBindVertexArray(model_mesh.OccluderBuffer.vao);
+            glDrawElements(GL_TRIANGLES, occluder_mesh.indices.size(), GL_UNSIGNED_SHORT, 0);
         }
 
         if (reload)
         {
-            occluder = Melt::GenerateConservativeOccluder(scene.occluder_mesh, gen_params, debug_params);
+            Melt::GenerateConservativeOccluder(model_mesh.InputMesh, gen_params, debug_params, occluder_mesh);
 
-            glBindBuffer(GL_ARRAY_BUFFER, scene.occ_vbo);
-            glBufferData(GL_ARRAY_BUFFER, occluder.vertices.size() * sizeof(glm::vec3), occluder.vertices.data(), GL_STATIC_DRAW);
+            glBindBuffer(GL_ARRAY_BUFFER, model_mesh.OccluderBuffer.vbo);
+            glBufferData(GL_ARRAY_BUFFER, occluder_mesh.vertices.size() * sizeof(glm::vec3), occluder_mesh.vertices.data(), GL_STATIC_DRAW);
 
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, scene.occ_indices);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, occluder.indices.size() * sizeof(GLushort), occluder.indices.data(), GL_STATIC_DRAW);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, model_mesh.OccluderBuffer.indices);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, occluder_mesh.indices.size() * sizeof(GLushort), occluder_mesh.indices.data(), GL_STATIC_DRAW);
         }
 
         ImGui::Render();

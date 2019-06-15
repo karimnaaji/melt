@@ -820,9 +820,10 @@ static MaxExtent GetMaxExtent(const Context& context, const VoxelField& voxel_fi
     return max_extent;
 }
 
-Mesh GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationParams& gen_params, const DebugParams& debug_params)
+void GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationParams& gen_params, const DebugParams& debug_params, Mesh& out_mesh)
 {
-    Mesh result;
+    out_mesh.vertices.clear();
+    out_mesh.indices.clear();
 
     vec3 voxel_extent(gen_params.voxelSize);
     vec3 half_voxel_extent = voxel_extent * 0.5f;
@@ -968,24 +969,24 @@ Mesh GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
     {
         if (debug_params.flags & DebugTypeShowOuter)
         {
-            AddVoxelSetToMesh(outer_voxels, half_voxel_extent * debug_params.voxelScale, result);
+            AddVoxelSetToMesh(outer_voxels, half_voxel_extent * debug_params.voxelScale, out_mesh);
         }
         if (debug_params.flags & DebugTypeShowSliceSelection)
         {
             if (debug_params.voxelY > 0 && debug_params.voxelZ > 0)
             {
                 VoxelSet voxels_x = SelectVoxelsOnXAxis(outer_voxels, debug_params.voxelY, debug_params.voxelZ);
-                AddVoxelSetToMesh(voxels_x, half_voxel_extent * debug_params.voxelScale, result);
+                AddVoxelSetToMesh(voxels_x, half_voxel_extent * debug_params.voxelScale, out_mesh);
             }
             if (debug_params.voxelX > 0 && debug_params.voxelZ > 0)
             {
                 VoxelSet voxels_y = SelectVoxelsOnYAxis(outer_voxels, debug_params.voxelX, debug_params.voxelZ);
-                AddVoxelSetToMesh(voxels_y, half_voxel_extent * debug_params.voxelScale, result);
+                AddVoxelSetToMesh(voxels_y, half_voxel_extent * debug_params.voxelScale, out_mesh);
             }
             if (debug_params.voxelX > 0 && debug_params.voxelY > 0)
             {
                 VoxelSet voxels_z = SelectVoxelsOnZAxis(outer_voxels, debug_params.voxelX, debug_params.voxelY);
-                AddVoxelSetToMesh(voxels_z, half_voxel_extent * debug_params.voxelScale, result);
+                AddVoxelSetToMesh(voxels_z, half_voxel_extent * debug_params.voxelScale, out_mesh);
             }
         }
         if (debug_params.flags & DebugTypeShowInner)
@@ -1001,7 +1002,7 @@ Mesh GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
                     debug_params.voxelY < 0 ||
                     debug_params.voxelZ < 0)
                 {
-                    AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, result);
+                    AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, out_mesh);
                 }
             }
         }
@@ -1014,22 +1015,22 @@ Mesh GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
                     debug_params.voxelY == min_distance.y &&
                     debug_params.voxelZ == min_distance.z)
                 {
-                    AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, result);
+                    AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, out_mesh);
 
                     for (u32 x = min_distance.x; x < min_distance.x + min_distance.dist.x; ++x)
                     {
                         vec3 voxel_center = mesh_aabb.min + vec3(x, min_distance.y, min_distance.z) * voxel_extent;
-                        AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, result);
+                        AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, out_mesh);
                     }
                     for (u32 y = min_distance.y; y < min_distance.y + min_distance.dist.y; ++y)
                     {
                         vec3 voxel_center = mesh_aabb.min + vec3(min_distance.x, y, min_distance.z) * voxel_extent;
-                        AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, result);
+                        AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, out_mesh);
                     }
                     for (u32 z = min_distance.z; z < min_distance.z + min_distance.dist.z; ++z)
                     {
                         vec3 voxel_center = mesh_aabb.min + vec3(min_distance.x, min_distance.y, z) * voxel_extent;
-                        AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, result);
+                        AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, out_mesh);
                     }
                 }
             }
@@ -1046,7 +1047,7 @@ Mesh GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
                         for (u32 z = min_distance.z; z < min_distance.z + max_extent.z; ++z)
                         {
                             vec3 voxel_center = mesh_aabb.min + vec3(x, y, z) * voxel_extent;
-                            AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, result);
+                            AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, out_mesh);
                         }
                     }
                 }
@@ -1062,13 +1063,11 @@ Mesh GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
                     vec3 half_extent = vec3(extent.extent) * voxel_extent * 0.5f;
                     vec3 aabb_center = mesh_aabb.min + vec3(extent.position) * voxel_extent + half_extent;
                     Color3u8 color = Colors[i % ARRAY_LENGTH(Colors)];
-                    AddVoxelToMesh(aabb_center + half_voxel_extent, half_extent, result, color);
+                    AddVoxelToMesh(aabb_center + half_voxel_extent, half_extent, out_mesh, color);
                 }
             }
         }
     }
-
-    return result;
 }
 
 } // namespace Melt

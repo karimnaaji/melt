@@ -101,6 +101,6 @@ struct Result
     std::vector<OccluderBox> occluderBoxes;
 };
 
-Mesh GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationParams& gen_params, const DebugParams& debug_params);
+void GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationParams& gen_params, const DebugParams& debug_params, Mesh& out_mesh);
 
 } // namespace Melt
