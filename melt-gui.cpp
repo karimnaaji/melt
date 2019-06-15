@@ -370,7 +370,7 @@ int main(int argc, char* argv[])
     ComputeMeshConservativeOcclusion(argv[1], debug_params, gen_params, occluder_mesh, model_mesh);
 
     auto end = std::chrono::high_resolution_clock::now();
-        auto timing = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        auto timing = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         printf("Total time: %lld\n", timing);
     
     OcclusionContext occlusion_context;
@@ -392,7 +392,7 @@ int main(int argc, char* argv[])
             *occlusion_context.model_mesh);
 
         auto end = std::chrono::high_resolution_clock::now();
-        auto timing = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        auto timing = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
         printf("Total time: %lldms\n", timing);
     });
 
