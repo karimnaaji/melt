@@ -20,6 +20,8 @@ include_directories(deps/glfw/deps)
 include_directories(deps/glfw/include)
 include_directories(deps/glm)
 
-add_executable(${PROJECT_NAME} melt-gui.cpp melt.cpp deps/glfw/deps/glad.c)
+add_definitions(-DMTR_ENABLED)
+
+add_executable(${PROJECT_NAME} melt-gui.cpp deps/minitrace.c deps/glfw/deps/glad.c)
 
 target_link_libraries(${PROJECT_NAME} glfw ${GLFW_LIBRARIES})

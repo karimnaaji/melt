@@ -12,6 +12,11 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
+#include "minitrace.h"
+
+#define MELT_PROFILE_BEGIN() MTR_BEGIN("MELT", __func__)
+#define MELT_PROFILE_END() MTR_END("MELT", __func__)
+#define MELT_IMPLEMENTATION
 #include "melt.h"
 
 #include <chrono>
@@ -40,6 +45,21 @@ struct Camera
 {
     glm::mat4 view;
     glm::vec3 position;
+};
+
+struct ScopedTimer
+{
+    ScopedTimer()
+    {
+        start = std::chrono::high_resolution_clock::now();
+    }
+    ~ScopedTimer()
+    {
+        auto end = std::chrono::high_resolution_clock::now();
+        auto timing = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        printf("Total time: %lld\n", timing);
+    }
+    std::chrono::time_point<std::chrono::high_resolution_clock> start;
 };
 
 static bool LoadModelMesh(const char* model_path, ModelMesh& out_model_mesh, std::vector<glm::vec3>& out_buffer_data)
@@ -300,7 +320,10 @@ static bool ComputeMeshConservativeOcclusion(const char* mesh_path, const Melt::
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)(sizeof(float) * 3));
 
-    Melt::GenerateConservativeOccluder(out_mesh.InputMesh, gen_params, debug_params, out_occluder);
+    {
+        ScopedTimer scoped_timer;
+        Melt::GenerateConservativeOccluder(out_mesh.InputMesh, gen_params, debug_params, out_occluder);
+    }
 
     glGenVertexArrays(1, &out_mesh.OccluderBuffer.vao);
     glBindVertexArray(out_mesh.OccluderBuffer.vao);
@@ -330,6 +353,8 @@ int main(int argc, char* argv[])
         fprintf(stderr, "glfwInit failed\n");
         return 1;
     }
+
+    mtr_init("trace.json");
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
@@ -365,13 +390,7 @@ int main(int argc, char* argv[])
     Melt::Mesh occluder_mesh;
     ModelMesh model_mesh;
 
-    auto start = std::chrono::high_resolution_clock::now();
-
     ComputeMeshConservativeOcclusion(argv[1], debug_params, gen_params, occluder_mesh, model_mesh);
-
-    auto end = std::chrono::high_resolution_clock::now();
-        auto timing = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        printf("Total time: %lld\n", timing);
     
     OcclusionContext occlusion_context;
     occlusion_context.debug_params = &debug_params;
@@ -383,17 +402,11 @@ int main(int argc, char* argv[])
     {
         const OcclusionContext& occlusion_context = *(OcclusionContext*)glfwGetWindowUserPointer(window);
 
-        auto start = std::chrono::high_resolution_clock::now();
-
         ComputeMeshConservativeOcclusion(paths[0],
             *occlusion_context.debug_params,
             *occlusion_context.gen_params,
             *occlusion_context.occluder_mesh,
             *occlusion_context.model_mesh);
-
-        auto end = std::chrono::high_resolution_clock::now();
-        auto timing = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        printf("Total time: %lldms\n", timing);
     });
 
     SetupIMGUIStyle();
@@ -526,7 +539,10 @@ int main(int argc, char* argv[])
 
         if (reload)
         {
-            Melt::GenerateConservativeOccluder(model_mesh.InputMesh, gen_params, debug_params, occluder_mesh);
+            {
+                ScopedTimer scoped_timer;
+                Melt::GenerateConservativeOccluder(model_mesh.InputMesh, gen_params, debug_params, occluder_mesh);
+            }
 
             glBindBuffer(GL_ARRAY_BUFFER, model_mesh.OccluderBuffer.vbo);
             glBufferData(GL_ARRAY_BUFFER, occluder_mesh.vertices.size() * sizeof(glm::vec3), occluder_mesh.vertices.data(), GL_STATIC_DRAW);
@@ -544,6 +560,8 @@ int main(int argc, char* argv[])
 
     glfwDestroyWindow(window);
     glfwTerminate();
+
+    mtr_shutdown();
 
     return 0;
 }
