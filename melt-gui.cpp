@@ -23,6 +23,10 @@
 
 struct ModelMesh
 {
+    ModelMesh()
+    {
+        std::memset(this, 0x0, sizeof(ModelMesh));
+    }
     GLuint Program;
     struct
     {
@@ -390,7 +394,8 @@ int main(int argc, char* argv[])
     Melt::Mesh occluder_mesh;
     ModelMesh model_mesh;
 
-    ComputeMeshConservativeOcclusion(argv[1], debug_params, gen_params, occluder_mesh, model_mesh);
+    if (argc >= 2)
+        ComputeMeshConservativeOcclusion(argv[1], debug_params, gen_params, occluder_mesh, model_mesh);
     
     OcclusionContext occlusion_context;
     occlusion_context.debug_params = &debug_params;
@@ -441,6 +446,8 @@ int main(int argc, char* argv[])
                 ImGuiWindowFlags_NoSavedSettings;
 
             ImGui::Begin("Fixed Overlay", nullptr, ImVec2(0,0), 0.3f, options);
+
+            ImGui::Text("Drag and drop an .obj model");
 
             ImGui::Checkbox("Show Debug Controls", &show_debug_gui);
             ImGui::InputFloat("Voxel Size", &gen_params.voxelSize);
@@ -525,16 +532,22 @@ int main(int argc, char* argv[])
             glm::mat4 projection = glm::perspective(glm::radians(fov), float(width) / height, 0.01f, 100.0f);
             glm::mat4 viewProjection = projection * camera.view;
 
-            glUseProgram(model_mesh.Program);
+            if (model_mesh.Program)
+                glUseProgram(model_mesh.Program);
 
             glUniformMatrix4fv(model_mesh.ModelViewProjection, 1, GL_FALSE, glm::value_ptr(viewProjection));
             glUniform1f(model_mesh.Alpha, alpha);
 
-            glBindVertexArray(model_mesh.MeshBuffer.vao);
-            glDrawArrays(GL_TRIANGLES, 0, model_mesh.VertexCount);
-
-            glBindVertexArray(model_mesh.OccluderBuffer.vao);
-            glDrawElements(GL_TRIANGLES, occluder_mesh.indices.size(), GL_UNSIGNED_SHORT, 0);
+            if (model_mesh.MeshBuffer.vao && model_mesh.VertexCount > 0)
+            {
+                glBindVertexArray(model_mesh.MeshBuffer.vao);
+                glDrawArrays(GL_TRIANGLES, 0, model_mesh.VertexCount);
+            }
+            if (model_mesh.OccluderBuffer.vao && occluder_mesh.indices.size() > 0)
+            {
+                glBindVertexArray(model_mesh.OccluderBuffer.vao);
+                glDrawElements(GL_TRIANGLES, occluder_mesh.indices.size(), GL_UNSIGNED_SHORT, 0);
+            }
         }
 
         if (reload)

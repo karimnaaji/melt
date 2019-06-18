@@ -1,0 +1,67 @@
+# Created by http://www.gitignore.io
+
+*.bin
+*.out
+
+### OSX ###
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Log Files
+*.log
+
+### Xcode ###
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata
+*.xccheckout
+*.moved-aside
+DerivedData
+*.xcuserstate
+
+## File-based project format:
+*.ipr
+*.iws
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+*.drc
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# CMake files
+CMakeCache.txt
+CMakeScripts
+CMakeFiles
+build
+build/**/Makefile
+cmake_install.cmake
+install_manifest.txt
+
+# vim
+*.swp
+*.swo
