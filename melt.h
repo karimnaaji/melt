@@ -512,34 +512,46 @@ static AABB GenerateAABB(const Mesh& mesh)
     return aabb;
 }
 
-static void SelectVoxelsOnXAxis(const VoxelSet& voxel_set, u32 y, u32 z, VoxelSet& out_result)
+static void SelectVoxelsOnXAxis(const VoxelSet& voxel_set, const VoxelIndices& voxel_indices, u32 y, u32 z, const vec3& dimension, VoxelSet& out_result)
 {
-    for (u32 i = 0; i < voxel_set.size(); ++i)
+    for (u32 x = 0; x < dimension.x; ++x)
     {
-        if (voxel_set[i].position.y == y && voxel_set[i].position.z == z)
-            out_result.push_back(voxel_set[i]);
+        vec3 position(x, y, z);
+        s32 voxel_index = voxel_indices[Flatten(position, dimension)];
+        if (voxel_index != -1)
+        {
+            out_result.push_back(voxel_set[voxel_index]);
+        }
     }
 }
 
-static void SelectVoxelsOnYAxis(const VoxelSet& voxel_set, u32 x, u32 z, VoxelSet& out_result)
+static void SelectVoxelsOnYAxis(const VoxelSet& voxel_set, const VoxelIndices& voxel_indices, u32 x, u32 z, const vec3& dimension, VoxelSet& out_result)
 {
-    for (u32 i = 0; i < voxel_set.size(); ++i)
+    for (u32 y = 0; y < dimension.y; ++y)
     {
-        if (voxel_set[i].position.x == x && voxel_set[i].position.z == z)
-            out_result.push_back(voxel_set[i]);
+        vec3 position(x, y, z);
+        s32 voxel_index = voxel_indices[Flatten(position, dimension)];
+        if (voxel_index != -1)
+        {
+            out_result.push_back(voxel_set[voxel_index]);
+        }
     }
 }
 
-static void SelectVoxelsOnZAxis(const VoxelSet& voxel_set, u32 x, u32 y, VoxelSet& out_result)
+static void SelectVoxelsOnZAxis(const VoxelSet& voxel_set, const VoxelIndices& voxel_indices, u32 x, u32 y, const vec3& dimension, VoxelSet& out_result)
 {
-    for (u32 i = 0; i < voxel_set.size(); ++i)
+    for (u32 z = 0; z < dimension.z; ++z)
     {
-        if (voxel_set[i].position.x == x && voxel_set[i].position.y == y)
-            out_result.push_back(voxel_set[i]);
+        vec3 position(x, y, z);
+        s32 voxel_index = voxel_indices[Flatten(position, dimension)];
+        if (voxel_index != -1)
+        {
+            out_result.push_back(voxel_set[voxel_index]);
+        }
     }
 }
 
-static void GetField(Context& context, const VoxelSet& voxel_set, u32 x, u32 y, u32 z, MinDistance& out_min_distance, VoxelStatus& out_status)
+static void GetField(Context& context, const VoxelSet& voxel_set, const VoxelIndices& voxel_indices, u32 x, u32 y, u32 z, MinDistance& out_min_distance, VoxelStatus& out_status)
 {
     MELT_PROFILE_BEGIN();
 
@@ -556,7 +568,7 @@ static void GetField(Context& context, const VoxelSet& voxel_set, u32 x, u32 y, 
     out_status.inner = false;
 
     context.scratch.clear();
-    SelectVoxelsOnXAxis(voxel_set, y, z, context.scratch);
+    SelectVoxelsOnXAxis(voxel_set, voxel_indices, y, z, context.dimension, context.scratch);
     for (const auto& voxel : context.scratch)
     {
         s32 distance = voxel.position.x - x;
@@ -571,7 +583,7 @@ static void GetField(Context& context, const VoxelSet& voxel_set, u32 x, u32 y, 
             out_min_distance.dist.x = 0;
     }
     context.scratch.clear();
-    SelectVoxelsOnYAxis(voxel_set, x, z, context.scratch);
+    SelectVoxelsOnYAxis(voxel_set, voxel_indices, x, z, context.dimension, context.scratch);
     for (const auto& voxel : context.scratch)
     {
         s32 distance = voxel.position.y - y;
@@ -586,7 +598,7 @@ static void GetField(Context& context, const VoxelSet& voxel_set, u32 x, u32 y, 
             out_min_distance.dist.y = 0;
     }
     context.scratch.clear();
-    SelectVoxelsOnZAxis(voxel_set, x, y, context.scratch);
+    SelectVoxelsOnZAxis(voxel_set, voxel_indices, x, y, context.dimension, context.scratch);
     for (const auto& voxel : context.scratch)
     {
         s32 distance = voxel.position.z - z;
@@ -612,7 +624,7 @@ static void GetField(Context& context, const VoxelSet& voxel_set, u32 x, u32 y, 
     MELT_PROFILE_END();
 }
 
-static void GenerateFields(Context& context, const VoxelSet& voxel_set, VoxelField& out_voxel_field, MinDistanceField& out_distance_field)
+static void GenerateFields(Context& context, const VoxelSet& voxel_set, const VoxelIndices& voxel_indices, VoxelField& out_voxel_field, MinDistanceField& out_distance_field)
 {
     MELT_PROFILE_BEGIN();
 
@@ -622,7 +634,7 @@ static void GenerateFields(Context& context, const VoxelSet& voxel_set, VoxelFie
         VoxelStatus& voxel_status = out_voxel_field[i];
         const uvec3 position = UnFlatten(i, context.dimension);
 
-        GetField(context, voxel_set, position.x, position.y, position.z, min_distance, voxel_status);
+        GetField(context, voxel_set, voxel_indices, position.x, position.y, position.z, min_distance, voxel_status);
     }
 
     MELT_PROFILE_END();
@@ -1019,7 +1031,7 @@ void GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
 
     // Generate the minimum distance field, and voxel status from the initial shell.
 
-    GenerateFields(context, outer_voxels, voxel_field, min_distance_field);
+    GenerateFields(context, outer_voxels, voxel_indices, voxel_field, min_distance_field);
 
     _Debug_ValidateMinDistanceField(context, outer_voxels, voxel_field, min_distance_field);
 
@@ -1091,17 +1103,17 @@ void GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
         {
             if (debug_params.voxelY > 0 && debug_params.voxelZ > 0)
             {
-                SelectVoxelsOnXAxis(outer_voxels, debug_params.voxelY, debug_params.voxelZ, context.scratch);
+                SelectVoxelsOnXAxis(outer_voxels, voxel_indices, debug_params.voxelY, debug_params.voxelZ, context.dimension, context.scratch);
                 AddVoxelSetToMesh(context.scratch, half_voxel_extent * debug_params.voxelScale, out_mesh);
             }
             if (debug_params.voxelX > 0 && debug_params.voxelZ > 0)
             {
-                SelectVoxelsOnYAxis(outer_voxels, debug_params.voxelX, debug_params.voxelZ, context.scratch);
+                SelectVoxelsOnYAxis(outer_voxels, voxel_indices, debug_params.voxelX, debug_params.voxelZ, context.dimension, context.scratch);
                 AddVoxelSetToMesh(context.scratch, half_voxel_extent * debug_params.voxelScale, out_mesh);
             }
             if (debug_params.voxelX > 0 && debug_params.voxelY > 0)
             {
-                SelectVoxelsOnZAxis(outer_voxels, debug_params.voxelX, debug_params.voxelY, context.scratch);
+                SelectVoxelsOnZAxis(outer_voxels, voxel_indices, debug_params.voxelX, debug_params.voxelY, context.dimension, context.scratch);
                 AddVoxelSetToMesh(context.scratch, half_voxel_extent * debug_params.voxelScale, out_mesh);
             }
         }
