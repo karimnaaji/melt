@@ -30,8 +30,7 @@
 #include <vector>
 
 #ifndef MELT_ASSERT
-#include <cassert>
-#define MELT_ASSERT(stmt) assert(stmt)
+#define MELT_ASSERT(stmt) (void)(stmt)
 #endif
 #ifndef MELT_PROFILE_BEGIN
 #define MELT_PROFILE_BEGIN()
@@ -733,9 +732,6 @@ static void ClipVoxelField(const Context& context, const uvec3& start_position, 
 
 static void _Debug_ValidateMinDistanceField(const Context& context, const VoxelSet& outer_voxels, const VoxelField& voxel_field, const MinDistanceField& distance_field)
 {
-#ifndef MELT_ASSERT
-    return;
-#endif
     for (const auto& min_distance : distance_field)
     {
         if (!InnerVoxel(voxel_field[Flatten(min_distance.position, context.dimension)]))
@@ -773,9 +769,6 @@ static void _Debug_ValidateMinDistanceField(const Context& context, const VoxelS
 
 static void _Debug_ValidateMaxExtents(const MaxExtents& max_extents, const VoxelSet& outer_voxels)
 {
-#ifndef MELT_ASSERT
-    return;
-#endif
     for (u32 i = 0; i < max_extents.size(); ++i)
     {
         const auto& extent = max_extents[i];
