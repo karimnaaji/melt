@@ -31,7 +31,7 @@
 
 #ifndef MELT_ASSERT
 #include <cassert>
-#define MELT_ASSERT(stmt) (void)(stmt) //assert(stmt)
+#define MELT_ASSERT(stmt) assert(stmt)
 #endif
 #ifndef MELT_PROFILE_BEGIN
 #define MELT_PROFILE_BEGIN()
@@ -421,18 +421,24 @@ static bool AABBIntersectsTriangle(const Triangle& triangle, const vec3& aabb_ce
 static inline u32 Flatten(const uvec3& index, const uvec3& dimension)
 {
     u32 out_index = index.x + dimension.x * index.y + dimension.x * dimension.y * index.z;
+    MELT_ASSERT(out_index < dimension.x * dimension.y * dimension.z);
     return out_index;
 }
 
-static inline uvec3 UnFlatten(u32 index, const uvec3& dimension)
+static inline uvec3 UnFlatten(u32 position, const uvec3& dimension)
 {
     uvec3 out_index;
 
     u32 dim_xy = dimension.x * dimension.y;
-    out_index.z = index / dim_xy;
-    index -= out_index.z * dim_xy;
-    out_index.y = index / dimension.x;
-    out_index.x = index % dimension.x;
+    out_index.z = position / dim_xy;
+    position -= out_index.z * dim_xy;
+    out_index.y = position / dimension.x;
+    out_index.x = position % dimension.x;
+
+    MELT_ASSERT(out_index.x < dimension.x);
+    MELT_ASSERT(out_index.y < dimension.y);
+    MELT_ASSERT(out_index.z < dimension.z);
+
     return out_index;
 }
 
@@ -943,6 +949,10 @@ void GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
 
     vec3 mesh_extent = mesh_aabb.max - mesh_aabb.min;
     vec3 voxel_count = mesh_extent / gen_params.voxelSize;
+
+    voxel_count.x = ceilf(voxel_count.x);
+    voxel_count.y = ceilf(voxel_count.y);
+    voxel_count.z = ceilf(voxel_count.z);
 
     Context context;
     context.dimension = uvec3(voxel_count);
