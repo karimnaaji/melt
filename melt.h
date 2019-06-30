@@ -533,6 +533,10 @@ static void GeneratePerPlaneVoxelSet(const Context& context, const VoxelSet& vox
     out_voxel_set_planes.y.resize(context.dimension.x * context.dimension.z);
     out_voxel_set_planes.z.resize(context.dimension.x * context.dimension.y);
     
+    uvec2 dim_yz = uvec2(context.dimension.y, context.dimension.z);
+    uvec2 dim_xz = uvec2(context.dimension.x, context.dimension.y);
+    uvec2 dim_xy = uvec2(context.dimension.x, context.dimension.y);
+
     for (u32 x = 0; x < context.dimension.x; ++x)
     {
         for (u32 y = 0; y < context.dimension.y; ++y)
@@ -543,9 +547,9 @@ static void GeneratePerPlaneVoxelSet(const Context& context, const VoxelSet& vox
                 s32 voxel_index = voxel_indices[Flatten3d(position, context.dimension)];
                 if (voxel_index != -1)
                 {
-                    u32 index_yz = Flatten2d(uvec2(y, z), uvec2(context.dimension.y, context.dimension.z));
-                    u32 index_xz = Flatten2d(uvec2(x, z), uvec2(context.dimension.x, context.dimension.z));
-                    u32 index_xy = Flatten2d(uvec2(x, y), uvec2(context.dimension.x, context.dimension.y));
+                    u32 index_yz = Flatten2d(uvec2(y, z), dim_yz);
+                    u32 index_xz = Flatten2d(uvec2(x, z), dim_xz);
+                    u32 index_xy = Flatten2d(uvec2(x, y), dim_xy);
 
                     VoxelSet& voxels_x_planes = out_voxel_set_planes.x[index_yz];
                     VoxelSet& voxels_y_planes = out_voxel_set_planes.y[index_xz];
@@ -576,7 +580,8 @@ static void GetField(Context& context, const VoxelSetPlanes& voxel_set_planes, c
     out_status.clipped = false;
     out_status.inner = false;
 
-    u32 index_yz = Flatten2d(uvec2(y, z), uvec2(context.dimension.y, context.dimension.z));
+    uvec2 dim_yz = uvec2(context.dimension.y, context.dimension.z);
+    u32 index_yz = Flatten2d(uvec2(y, z), dim_yz);
     const auto& voxels_x_plane = voxel_set_planes.x[index_yz];
     for (const auto& voxel : voxels_x_plane)
     {
@@ -591,7 +596,8 @@ static void GetField(Context& context, const VoxelSetPlanes& voxel_set_planes, c
         else
             out_min_distance.dist.x = 0;
     }
-    u32 index_xz = Flatten2d(uvec2(x, z), uvec2(context.dimension.x, context.dimension.z));
+    uvec2 dim_xz = uvec2(context.dimension.x, context.dimension.z);
+    u32 index_xz = Flatten2d(uvec2(x, z), dim_xz);
     const auto& voxels_y_plane = voxel_set_planes.y[index_xz];
     for (const auto& voxel : voxels_y_plane)
     {
@@ -606,7 +612,8 @@ static void GetField(Context& context, const VoxelSetPlanes& voxel_set_planes, c
         else
             out_min_distance.dist.y = 0;
     }
-    u32 index_xy = Flatten2d(uvec2(x, y), uvec2(context.dimension.x, context.dimension.y));
+    uvec2 dim_xy = uvec2(context.dimension.x, context.dimension.y);
+    u32 index_xy = Flatten2d(uvec2(x, y), dim_xy);
     const auto& voxels_z_plane = voxel_set_planes.z[index_xy];
     for (const auto& voxel : voxels_z_plane)
     {
