@@ -16,7 +16,7 @@
 
 #include <cassert>
 
-#define MELT_ASSERT(stmt) assert(stmt)
+//#define MELT_ASSERT(stmt) assert(stmt)
 #define MELT_PROFILE_BEGIN() MTR_BEGIN("MELT", __func__)
 #define MELT_PROFILE_END() MTR_END("MELT", __func__)
 #define MELT_IMPLEMENTATION
