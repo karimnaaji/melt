@@ -100,14 +100,14 @@ struct OccluderBox
     glm::vec3 center;
     glm::vec3 halfExtent;
 };
-
-struct Result
+    
+enum Result
 {
-    Mesh mesh;
-    std::vector<OccluderBox> occluderBoxes;
+    ResultSuccess,
+    ResulttNonWaterTightMesh,
 };
 
-void GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationParams& gen_params, const DebugParams& debug_params, Mesh& out_mesh);
+Result GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationParams& gen_params, const DebugParams& debug_params, Mesh& out_mesh);
 
 } // namespace Melt
 
@@ -755,6 +755,48 @@ static void ClipVoxelField(const Context& context, const uvec3& start_position, 
 
     MELT_PROFILE_END();
 }
+    
+static bool WaterTightMesh(const Context& context, const VoxelField& voxel_field, const MinDistanceField& distance_field)
+{
+    for (const auto& min_distance : distance_field)
+    {
+        if (!InnerVoxel(voxel_field[Flatten3d(min_distance.position, context.dimension)]))
+            continue;
+        
+        for (u32 x = min_distance.x; x < min_distance.x + min_distance.dist.x; ++x)
+        {
+            const u32 y = min_distance.y;
+            const u32 z = min_distance.z;
+            const u32 index = Flatten3d(uvec3(x, y, z), context.dimension);
+            if (!InnerVoxel(voxel_field[index]))
+            {
+                return false;
+            }
+        }
+        for (u32 y = min_distance.y; y < min_distance.y + min_distance.dist.y; ++y)
+        {
+            const u32 x = min_distance.x;
+            const u32 z = min_distance.z;
+            const u32 index = Flatten3d(uvec3(x, y, z), context.dimension);
+            if (!InnerVoxel(voxel_field[index]))
+            {
+                return false;
+            }
+        }
+        for (u32 z = min_distance.z; z < min_distance.z + min_distance.dist.z; ++z)
+        {
+            const u32 x = min_distance.x;
+            const u32 y = min_distance.y;
+            const u32 index = Flatten3d(uvec3(x, y, z), context.dimension);
+            if (!InnerVoxel(voxel_field[index]))
+            {
+                return false;
+            }
+        }
+    }
+    
+    return true;
+}
 
 static void _Debug_ValidateMinDistanceField(const Context& context, const VoxelSet& outer_voxels, const VoxelField& voxel_field, const MinDistanceField& distance_field)
 {
@@ -959,7 +1001,7 @@ static MaxExtent GetMaxExtent(const Context& context, const VoxelField& voxel_fi
     return max_extent;
 }
 
-void GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationParams& gen_params, const DebugParams& debug_params, Mesh& out_mesh)
+Result GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationParams& gen_params, const DebugParams& debug_params, Mesh& out_mesh)
 {
     out_mesh.vertices.clear();
     out_mesh.indices.clear();
@@ -1056,6 +1098,11 @@ void GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
     // Generate the minimum distance field, and voxel status from the initial shell.
 
     GenerateFields(context, voxel_set_planes, voxel_indices, voxel_field, min_distance_field);
+    
+    if (!WaterTightMesh(context, voxel_field, min_distance_field))
+    {
+        return ResulttNonWaterTightMesh;
+    }
 
     _Debug_ValidateMinDistanceField(context, outer_voxels, voxel_field, min_distance_field);
 
@@ -1223,6 +1270,8 @@ void GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
             }
         }
     }
+    
+    return ResultSuccess;
 }
 
 } // namespace Melt

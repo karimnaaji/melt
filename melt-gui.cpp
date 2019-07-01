@@ -16,6 +16,7 @@
 
 #include <cassert>
 
+//#define MELT_DEBUG
 //#define MELT_ASSERT(stmt) assert(stmt)
 #define MELT_PROFILE_BEGIN() MTR_BEGIN("MELT", __func__)
 #define MELT_PROFILE_END() MTR_END("MELT", __func__)
@@ -64,7 +65,7 @@ struct ScopedTimer
     {
         auto end = std::chrono::high_resolution_clock::now();
         auto timing = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-        printf("Total time: %lld\n", timing);
+        printf("Total time: %lldus\n", timing);
     }
     std::chrono::time_point<std::chrono::high_resolution_clock> start;
 };
@@ -329,7 +330,11 @@ static bool ComputeMeshConservativeOcclusion(const char* mesh_path, const Melt::
 
     {
         ScopedTimer scoped_timer;
-        Melt::GenerateConservativeOccluder(out_mesh.InputMesh, gen_params, debug_params, out_occluder);
+        Melt::Result result = Melt::GenerateConservativeOccluder(out_mesh.InputMesh, gen_params, debug_params, out_occluder);
+        if (result == Melt::ResulttNonWaterTightMesh)
+        {
+            printf("Non-watertight mesh detected, you may want to increase voxel resolution\n");
+        }
     }
 
     glGenVertexArrays(1, &out_mesh.OccluderBuffer.vao);
@@ -557,7 +562,11 @@ int main(int argc, char* argv[])
         {
             {
                 ScopedTimer scoped_timer;
-                Melt::GenerateConservativeOccluder(model_mesh.InputMesh, gen_params, debug_params, occluder_mesh);
+                Melt::Result result = Melt::GenerateConservativeOccluder(model_mesh.InputMesh, gen_params, debug_params, occluder_mesh);
+                if (result == Melt::ResulttNonWaterTightMesh)
+                {
+                    printf("Non-watertight mesh detected, you may want to increase voxel resolution\n");
+                }
             }
 
             glBindBuffer(GL_ARRAY_BUFFER, model_mesh.OccluderBuffer.vbo);
