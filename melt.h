@@ -975,9 +975,9 @@ void GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
     vec3 mesh_extent = mesh_aabb.max - mesh_aabb.min;
     vec3 voxel_count = mesh_extent / gen_params.voxelSize;
 
-    voxel_count.x = ceilf(voxel_count.x);
-    voxel_count.y = ceilf(voxel_count.y);
-    voxel_count.z = ceilf(voxel_count.z);
+    voxel_count.x = std::round(voxel_count.x);
+    voxel_count.y = std::round(voxel_count.y);
+    voxel_count.z = std::round(voxel_count.z);
 
     Context context;
     context.dimension = uvec3(voxel_count);
