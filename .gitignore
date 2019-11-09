@@ -34,7 +34,6 @@ DerivedData
 *.slo
 *.lo
 *.o
-*.obj
 *.drc
 
 # Compiled Dynamic libraries
