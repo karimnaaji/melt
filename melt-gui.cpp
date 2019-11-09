@@ -336,11 +336,11 @@ static bool ComputeMeshConservativeOcclusion(const char* mesh_path, MeltParams& 
     
     glGenBuffers(1, &out_mesh.OccluderBuffer.vbo);
     glBindBuffer(GL_ARRAY_BUFFER, out_mesh.OccluderBuffer.vbo);
-    glBufferData(GL_ARRAY_BUFFER, melt_result.mesh.vertices.size() * sizeof(glm::vec3), melt_result.mesh.vertices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, melt_result.debugMesh.vertices.size() * sizeof(glm::vec3), melt_result.debugMesh.vertices.data(), GL_STATIC_DRAW);
     
     glGenBuffers(1, &out_mesh.OccluderBuffer.indices);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, out_mesh.OccluderBuffer.indices);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, melt_result.mesh.indices.size() * sizeof(GLushort), melt_result.mesh.indices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, melt_result.debugMesh.indices.size() * sizeof(GLushort), melt_result.debugMesh.indices.data(), GL_STATIC_DRAW);
     
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)0);
@@ -539,10 +539,10 @@ int main(int argc, char* argv[])
                 glBindVertexArray(model_mesh.MeshBuffer.vao);
                 glDrawArrays(GL_TRIANGLES, 0, model_mesh.VertexCount);
             }
-            if (model_mesh.OccluderBuffer.vao && melt_result.mesh.indices.size() > 0)
+            if (model_mesh.OccluderBuffer.vao && melt_result.debugMesh.indices.size() > 0)
             {
                 glBindVertexArray(model_mesh.OccluderBuffer.vao);
-                glDrawElements(GL_TRIANGLES, melt_result.mesh.indices.size(), GL_UNSIGNED_SHORT, 0);
+                glDrawElements(GL_TRIANGLES, melt_result.debugMesh.indices.size(), GL_UNSIGNED_SHORT, 0);
             }
         }
 
@@ -554,10 +554,10 @@ int main(int argc, char* argv[])
             }
 
             glBindBuffer(GL_ARRAY_BUFFER, model_mesh.OccluderBuffer.vbo);
-            glBufferData(GL_ARRAY_BUFFER, melt_result.mesh.vertices.size() * sizeof(glm::vec3), melt_result.mesh.vertices.data(), GL_STATIC_DRAW);
+            glBufferData(GL_ARRAY_BUFFER, melt_result.debugMesh.vertices.size() * sizeof(glm::vec3), melt_result.debugMesh.vertices.data(), GL_STATIC_DRAW);
 
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, model_mesh.OccluderBuffer.indices);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, melt_result.mesh.indices.size() * sizeof(GLushort), melt_result.mesh.indices.data(), GL_STATIC_DRAW);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, melt_result.debugMesh.indices.size() * sizeof(GLushort), melt_result.debugMesh.indices.data(), GL_STATIC_DRAW);
         }
 
         ImGui::Render();

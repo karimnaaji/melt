@@ -101,9 +101,14 @@ struct MeltParams
 struct MeltResult
 {
     MeltMesh mesh;
+    MeltMesh debugMesh;
 };
 
 bool MeltGenerateOccluder(const MeltParams& params, MeltResult& result);
+
+#endif // MELT_H
+
+#ifdef MELT_IMPLEMENTATION
 
 typedef unsigned int    u32;
 typedef unsigned short  u16;
@@ -118,14 +123,6 @@ typedef glm::vec3       vec3;
 typedef glm::ivec3      svec3;
 typedef glm::uvec2      uvec2;
 typedef glm::uvec3      uvec3;
-
-u32 Flatten3d(const uvec3& index, const uvec3& dimension);
-u32 Flatten2d(const uvec2& index, const uvec2& dimension);
-uvec3 UnFlatten3d(u32 position, const uvec3& dimension);
-
-#endif // MELT_H
-
-#ifdef MELT_IMPLEMENTATION
 
 template<typename T>
 static T Min(T a, T b)
@@ -157,6 +154,34 @@ const Color3u8 Colors[] =
     Lightslategray,
     Darkseagreen,
     Floralwhite,
+};
+
+const u16 VoxelCubeIndices[36] =
+{
+    0, 1, 2,
+    0, 2, 3,
+    3, 2, 6,
+    3, 6, 7,
+    0, 7, 4,
+    0, 3, 7,
+    4, 7, 5,
+    7, 6, 5,
+    0, 4, 5,
+    0, 5, 1,
+    1, 5, 6,
+    1, 6, 2,
+};
+
+const vec3 VoxelCubeVertices[8] =
+{
+    vec3(-1.0f,  1.0f,  1.0f),
+    vec3(-1.0f, -1.0f,  1.0f),
+    vec3( 1.0f, -1.0f,  1.0f),
+    vec3( 1.0f,  1.0f,  1.0f),
+    vec3(-1.0f,  1.0f, -1.0f),
+    vec3(-1.0f, -1.0f, -1.0f),
+    vec3( 1.0f, -1.0f, -1.0f),
+    vec3( 1.0f,  1.0f, -1.0f),
 };
 
 struct AABB
@@ -418,21 +443,21 @@ static bool AABBIntersectsTriangle(const Triangle& triangle, const vec3& aabb_ce
     return true;
 }
 
-u32 Flatten3d(const uvec3& index, const uvec3& dimension)
+static inline u32 Flatten3d(const uvec3& index, const uvec3& dimension)
 {
     u32 out_index = index.x + dimension.x * index.y + dimension.x * dimension.y * index.z;
     MELT_ASSERT(out_index < dimension.x * dimension.y * dimension.z);
     return out_index;
 }
     
-u32 Flatten2d(const uvec2& index, const uvec2& dimension)
+static inline u32 Flatten2d(const uvec2& index, const uvec2& dimension)
 {
     u32 out_index = index.x + dimension.x * index.y;
     MELT_ASSERT(out_index < dimension.x * dimension.y);
     return out_index;
 }
 
-uvec3 UnFlatten3d(u32 position, const uvec3& dimension)
+static inline uvec3 UnFlatten3d(u32 position, const uvec3& dimension)
 {
     uvec3 out_index;
 
@@ -916,36 +941,21 @@ static void UpdateMinDistanceField(const Context& context, const uvec3& start_po
     MELT_PROFILE_END();
 }
 
-static void AddVoxelToMesh(vec3 voxel_center, vec3 half_voxel_size, MeltMesh& mesh, const Color3u8& color = Blueviolet)
+static void AddVoxelToMesh(vec3 voxel_center, vec3 half_voxel_size, MeltMesh& mesh)
 {
-    const u16 VoxelCubeIndices[36] =
+    u16 index_offset = (u16)mesh.vertices.size();
+    for (u32 i = 0; i < 8; ++i)
     {
-        0, 1, 2,
-        0, 2, 3,
-        3, 2, 6,
-        3, 6, 7,
-        0, 7, 4,
-        0, 3, 7,
-        4, 7, 5,
-        7, 6, 5,
-        0, 4, 5,
-        0, 5, 1,
-        1, 5, 6,
-        1, 6, 2,
-    };
-
-    const vec3 VoxelCubeVertices[8] =
+        mesh.vertices.push_back(half_voxel_size * VoxelCubeVertices[i] + voxel_center);
+    }
+    for (u32 i = 0; i < ARRAY_LENGTH(VoxelCubeIndices); ++i)
     {
-        vec3(-1.0f,  1.0f,  1.0f),
-        vec3(-1.0f, -1.0f,  1.0f),
-        vec3( 1.0f, -1.0f,  1.0f),
-        vec3( 1.0f,  1.0f,  1.0f),
-        vec3(-1.0f,  1.0f, -1.0f),
-        vec3(-1.0f, -1.0f, -1.0f),
-        vec3( 1.0f, -1.0f, -1.0f),
-        vec3( 1.0f,  1.0f, -1.0f),
-    };
+        mesh.indices.push_back(VoxelCubeIndices[i] + index_offset);
+    }
+}
 
+static void AddVoxelToMeshColor(vec3 voxel_center, vec3 half_voxel_size, MeltMesh& mesh, const Color3u8& color = Blueviolet)
+{
     u16 index_offset = (u16)mesh.vertices.size() / 2;
     for (u32 i = 0; i < 8; ++i)
     {
@@ -962,7 +972,7 @@ static void AddVoxelSetToMesh(const VoxelSet& voxel_set, const vec3& half_voxel_
 {
     for (const Voxel& voxel : voxel_set)
     {
-        AddVoxelToMesh(voxel.aabb.Center(), half_voxel_extent, mesh);
+        AddVoxelToMeshColor(voxel.aabb.Center(), half_voxel_extent, mesh);
     }
 }
 
@@ -998,6 +1008,8 @@ static MaxExtent GetMaxExtent(const Context& context, const VoxelField& voxel_fi
 
 bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
 {
+    out_result.debugMesh.vertices.clear();
+    out_result.debugMesh.indices.clear();
     out_result.mesh.vertices.clear();
     out_result.mesh.indices.clear();
 
@@ -1160,15 +1172,23 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
         }
     }
 
+    for (u32 i = 0; i < max_extents.size(); ++i)
+    {
+        const auto& extent = max_extents[i];
+        vec3 half_extent = vec3(extent.extent) * voxel_extent * 0.5f;
+        vec3 aabb_center = mesh_aabb.min + vec3(extent.position) * voxel_extent + half_extent;
+        AddVoxelToMesh(aabb_center + half_voxel_extent, half_extent, out_result.mesh);
+    }
+
     _Debug_ValidateMaxExtents(max_extents, outer_voxels);
 
     if (params.debug.flags > 0)
     {
-        // AddVoxelToMesh(mesh_aabb.Center(), (mesh_aabb.max - mesh_aabb.min) * 0.5f, out_result.mesh, Colors[0]);
+        // AddVoxelToMeshColor(mesh_aabb.Center(), (mesh_aabb.max - mesh_aabb.min) * 0.5f, out_result.debugMesh, Colors[0]);
 
         if (params.debug.flags & MeltDebugTypeShowOuter)
         {
-            AddVoxelSetToMesh(outer_voxels, half_voxel_extent * params.debug.voxelScale, out_result.mesh);
+            AddVoxelSetToMesh(outer_voxels, half_voxel_extent * params.debug.voxelScale, out_result.debugMesh);
         }
         if (params.debug.flags & MeltDebugTypeShowSliceSelection)
         {
@@ -1176,19 +1196,19 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
             {
                 u32 index = Flatten2d(uvec2(params.debug.voxelY, params.debug.voxelZ), uvec2(context.dimension.y, context.dimension.z));
                 VoxelSet& voxels_x_planes = voxel_set_planes.x[index];
-                AddVoxelSetToMesh(voxels_x_planes, half_voxel_extent * params.debug.voxelScale, out_result.mesh);
+                AddVoxelSetToMesh(voxels_x_planes, half_voxel_extent * params.debug.voxelScale, out_result.debugMesh);
             }
             if (params.debug.voxelX > 0 && params.debug.voxelZ > 0)
             {
                 u32 index = Flatten2d(uvec2(params.debug.voxelX, params.debug.voxelZ), uvec2(context.dimension.x, context.dimension.z));
                 VoxelSet& voxels_y_planes = voxel_set_planes.y[index];
-                AddVoxelSetToMesh(voxels_y_planes, half_voxel_extent * params.debug.voxelScale, out_result.mesh);
+                AddVoxelSetToMesh(voxels_y_planes, half_voxel_extent * params.debug.voxelScale, out_result.debugMesh);
             }
             if (params.debug.voxelX > 0 && params.debug.voxelY > 0)
             {
                 u32 index = Flatten2d(uvec2(params.debug.voxelX, params.debug.voxelY), uvec2(context.dimension.x, context.dimension.y));
                 VoxelSet& voxels_z_planes = voxel_set_planes.z[index];
-                AddVoxelSetToMesh(voxels_z_planes, half_voxel_extent * params.debug.voxelScale, out_result.mesh);
+                AddVoxelSetToMesh(voxels_z_planes, half_voxel_extent * params.debug.voxelScale, out_result.debugMesh);
             }
         }
         if (params.debug.flags & MeltDebugTypeShowInner)
@@ -1204,7 +1224,7 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
                     params.debug.voxelY < 0 ||
                     params.debug.voxelZ < 0)
                 {
-                    AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, out_result.mesh);
+                    AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
                 }
             }
         }
@@ -1217,22 +1237,22 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
                     params.debug.voxelY == min_distance.y &&
                     params.debug.voxelZ == min_distance.z)
                 {
-                    AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, out_result.mesh);
+                    AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
 
                     for (u32 x = min_distance.x; x < min_distance.x + min_distance.dist.x; ++x)
                     {
                         vec3 voxel_center = mesh_aabb.min + vec3(x, min_distance.y, min_distance.z) * voxel_extent;
-                        AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, out_result.mesh);
+                        AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
                     }
                     for (u32 y = min_distance.y; y < min_distance.y + min_distance.dist.y; ++y)
                     {
                         vec3 voxel_center = mesh_aabb.min + vec3(min_distance.x, y, min_distance.z) * voxel_extent;
-                        AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, out_result.mesh);
+                        AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
                     }
                     for (u32 z = min_distance.z; z < min_distance.z + min_distance.dist.z; ++z)
                     {
                         vec3 voxel_center = mesh_aabb.min + vec3(min_distance.x, min_distance.y, z) * voxel_extent;
-                        AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, out_result.mesh);
+                        AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
                     }
                 }
             }
@@ -1249,7 +1269,7 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
                         for (u32 z = min_distance.z; z < min_distance.z + max_extent.z; ++z)
                         {
                             vec3 voxel_center = mesh_aabb.min + vec3(x, y, z) * voxel_extent;
-                            AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, out_result.mesh);
+                            AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
                         }
                     }
                 }
@@ -1265,7 +1285,7 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
                     vec3 half_extent = vec3(extent.extent) * voxel_extent * 0.5f;
                     vec3 aabb_center = mesh_aabb.min + vec3(extent.position) * voxel_extent + half_extent;
                     Color3u8 color = Colors[i % ARRAY_LENGTH(Colors)];
-                    AddVoxelToMesh(aabb_center + half_voxel_extent, half_extent, out_result.mesh, color);
+                    AddVoxelToMeshColor(aabb_center + half_voxel_extent, half_extent, out_result.debugMesh, color);
                 }
             }
         }
