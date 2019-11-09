@@ -17,13 +17,11 @@
 #include <cassert>
 
 //#define MELT_DEBUG
-//#define MELT_ASSERT(stmt) assert(stmt)
+#define MELT_ASSERT(stmt) assert(stmt)
 #define MELT_PROFILE_BEGIN() MTR_BEGIN("MELT", __func__)
 #define MELT_PROFILE_END() MTR_END("MELT", __func__)
 #define MELT_IMPLEMENTATION
 #include "melt.h"
-
-#include <chrono>
 
 struct ModelMesh
 {
@@ -46,7 +44,7 @@ struct ModelMesh
     GLint ModelViewProjection;
     GLint Alpha;
     int VertexCount;
-    Melt::Mesh InputMesh;
+    MeltMesh InputMesh;
 };
 
 struct Camera
@@ -70,7 +68,7 @@ struct ScopedTimer
     std::chrono::time_point<std::chrono::high_resolution_clock> start;
 };
 
-static bool LoadModelMesh(const char* model_path, ModelMesh& out_model_mesh, std::vector<glm::vec3>& out_buffer_data)
+static bool LoadModelMesh(const char* model_path, MeltParams& melt_params, ModelMesh& out_model_mesh, std::vector<glm::vec3>& out_buffer_data)
 {
     GLchar* vertex_source = (GLchar*)R"END(
         #version 150
@@ -157,19 +155,19 @@ static bool LoadModelMesh(const char* model_path, ModelMesh& out_model_mesh, std
         }
     }
     
-    out_model_mesh.InputMesh.vertices.clear();
-    out_model_mesh.InputMesh.indices.clear();
+    melt_params.mesh.vertices.clear();
+    melt_params.mesh.indices.clear();
     for (size_t i = 0; i < shapes.size(); i++) 
     {
         for (size_t f = 0; f < shapes[i].mesh.indices.size(); f++) 
-            out_model_mesh.InputMesh.indices.push_back(shapes[i].mesh.indices[f]);
+            melt_params.mesh.indices.push_back(shapes[i].mesh.indices[f]);
 
         for (size_t v = 0; v < shapes[i].mesh.positions.size() / 3; v++) 
         {
-            out_model_mesh.InputMesh.vertices.emplace_back();
-            out_model_mesh.InputMesh.vertices.back().x = shapes[i].mesh.positions[3 * v + 0];
-            out_model_mesh.InputMesh.vertices.back().y = shapes[i].mesh.positions[3 * v + 1];
-            out_model_mesh.InputMesh.vertices.back().z = shapes[i].mesh.positions[3 * v + 2];
+            melt_params.mesh.vertices.emplace_back();
+            melt_params.mesh.vertices.back().x = shapes[i].mesh.positions[3 * v + 0];
+            melt_params.mesh.vertices.back().y = shapes[i].mesh.positions[3 * v + 1];
+            melt_params.mesh.vertices.back().z = shapes[i].mesh.positions[3 * v + 2];
         }
     }
 
@@ -297,7 +295,7 @@ static void SetupIMGUIStyle()
 #endif
 }
 
-static bool ComputeMeshConservativeOcclusion(const char* mesh_path, const Melt::DebugParams& debug_params, const Melt::OccluderGenerationParams& gen_params, Melt::Mesh& out_occluder, ModelMesh& out_mesh)
+static bool ComputeMeshConservativeOcclusion(const char* mesh_path, MeltParams& melt_params, MeltResult melt_result, ModelMesh& out_mesh)
 {
     if (out_mesh.MeshBuffer.vao)
         glDeleteVertexArrays(1, &out_mesh.MeshBuffer.vao);
@@ -313,7 +311,7 @@ static bool ComputeMeshConservativeOcclusion(const char* mesh_path, const Melt::
         glDeleteProgram(out_mesh.Program);
 
     std::vector<glm::vec3> buffer_data;
-    bool model_loaded = LoadModelMesh(mesh_path, out_mesh, buffer_data);
+    bool model_loaded = LoadModelMesh(mesh_path, melt_params, out_mesh, buffer_data);
     if (!model_loaded)
         return false;
     
@@ -330,11 +328,7 @@ static bool ComputeMeshConservativeOcclusion(const char* mesh_path, const Melt::
 
     {
         ScopedTimer scoped_timer;
-        Melt::Result result = Melt::GenerateConservativeOccluder(out_mesh.InputMesh, gen_params, debug_params, out_occluder);
-        if (result == Melt::ResulttNonWaterTightMesh)
-        {
-            printf("Non-watertight mesh detected, you may want to increase voxel resolution\n");
-        }
+        MeltGenerateOccluder(melt_params, melt_result);
     }
 
     glGenVertexArrays(1, &out_mesh.OccluderBuffer.vao);
@@ -342,11 +336,11 @@ static bool ComputeMeshConservativeOcclusion(const char* mesh_path, const Melt::
     
     glGenBuffers(1, &out_mesh.OccluderBuffer.vbo);
     glBindBuffer(GL_ARRAY_BUFFER, out_mesh.OccluderBuffer.vbo);
-    glBufferData(GL_ARRAY_BUFFER, out_occluder.vertices.size() * sizeof(glm::vec3), out_occluder.vertices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, melt_result.mesh.vertices.size() * sizeof(glm::vec3), melt_result.mesh.vertices.data(), GL_STATIC_DRAW);
     
     glGenBuffers(1, &out_mesh.OccluderBuffer.indices);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, out_mesh.OccluderBuffer.indices);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, out_occluder.indices.size() * sizeof(GLushort), out_occluder.indices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, melt_result.mesh.indices.size() * sizeof(GLushort), melt_result.mesh.indices.data(), GL_STATIC_DRAW);
     
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (void*)0);
@@ -379,9 +373,8 @@ int main(int argc, char* argv[])
     
     struct OcclusionContext
     {
-        Melt::DebugParams* debug_params;
-        Melt::OccluderGenerationParams* gen_params;
-        Melt::Mesh* occluder_mesh;
+        MeltParams* melt_params;
+        MeltResult* melt_result;
         ModelMesh* model_mesh;
     };
 
@@ -391,34 +384,29 @@ int main(int argc, char* argv[])
 
     ImGui_ImplGlfwGL3_Init(window, true);
     
-    Melt::DebugParams debug_params;
-    std::memset(&debug_params, 0, sizeof(Melt::DebugParams));
-    debug_params.voxelScale = 0.8f;
+    MeltParams melt_params;
+    melt_params.debug.voxelScale = 0.8f;
+    melt_params.voxelSize = 0.25f;
+    melt_params.fillPercentage = 1.0f;
     
-    Melt::OccluderGenerationParams gen_params;
-    gen_params.voxelSize = 0.25f;
-    gen_params.fillPercentage = 1.0f;
-    
-    Melt::Mesh occluder_mesh;
+    MeltResult melt_result;
     ModelMesh model_mesh;
 
     if (argc >= 2)
-        ComputeMeshConservativeOcclusion(argv[1], debug_params, gen_params, occluder_mesh, model_mesh);
+        ComputeMeshConservativeOcclusion(argv[1], melt_params, melt_result, model_mesh);
     
     OcclusionContext occlusion_context;
-    occlusion_context.debug_params = &debug_params;
-    occlusion_context.gen_params = &gen_params;
-    occlusion_context.occluder_mesh = &occluder_mesh;
+    occlusion_context.melt_params = &melt_params;
+    occlusion_context.melt_result = &melt_result;
     occlusion_context.model_mesh = &model_mesh;
     glfwSetWindowUserPointer(window, &occlusion_context);
     glfwSetDropCallback(window, [](GLFWwindow* window, int count, const char** paths)
     {
         const OcclusionContext& occlusion_context = *(OcclusionContext*)glfwGetWindowUserPointer(window);
 
-        ComputeMeshConservativeOcclusion(paths[0],
-            *occlusion_context.debug_params,
-            *occlusion_context.gen_params,
-            *occlusion_context.occluder_mesh,
+        ComputeMeshConservativeOcclusion(paths[0], 
+            *occlusion_context.melt_params, 
+            *occlusion_context.melt_result, 
             *occlusion_context.model_mesh);
     });
 
@@ -443,7 +431,7 @@ int main(int argc, char* argv[])
         static bool show_result = true;
         static bool show_debug_gui = false;
         {
-            debug_params.flags = 0;
+            melt_params.debug.flags = 0;
 
             ImGui::SetNextWindowPos(ImVec2(0, 0));
 
@@ -458,8 +446,8 @@ int main(int argc, char* argv[])
             ImGui::Text("Drag and drop an .obj model");
 
             ImGui::Checkbox("Show Debug Controls", &show_debug_gui);
-            ImGui::InputFloat("Voxel Size", &gen_params.voxelSize);
-            ImGui::DragFloat("Fill Percentage", &gen_params.fillPercentage, 0.01f, 0.0f, 1.0f);
+            ImGui::InputFloat("Voxel Size", &melt_params.voxelSize);
+            ImGui::DragFloat("Fill Percentage", &melt_params.fillPercentage, 0.01f, 0.0f, 1.0f);
 
             if (ImGui::Button("Generate"))
             {
@@ -468,17 +456,17 @@ int main(int argc, char* argv[])
 
             if (show_debug_gui)
             {
-                ImGui::InputFloat("Voxel Scale", &debug_params.voxelScale);
+                ImGui::InputFloat("Voxel Scale", &melt_params.debug.voxelScale);
                 ImGui::DragFloat("Alpha", &alpha, 0.01f, 0.0f, 1.0f);
 
-                ImGui::InputInt("Slice X", &debug_params.sliceIndexX);
-                ImGui::InputInt("Slice Y", &debug_params.sliceIndexY);
-                ImGui::InputInt("Slice Z", &debug_params.sliceIndexZ);
-                ImGui::InputInt("Voxel X", &debug_params.voxelX);
-                ImGui::InputInt("Voxel Y", &debug_params.voxelY);
-                ImGui::InputInt("Voxel Z", &debug_params.voxelZ);
-                ImGui::InputInt("Extent Index", &debug_params.extentIndex);
-                ImGui::InputInt("Extent Max Step", &debug_params.extentMaxStep);
+                ImGui::InputInt("Slice X", &melt_params.debug.sliceIndexX);
+                ImGui::InputInt("Slice Y", &melt_params.debug.sliceIndexY);
+                ImGui::InputInt("Slice Z", &melt_params.debug.sliceIndexZ);
+                ImGui::InputInt("Voxel X", &melt_params.debug.voxelX);
+                ImGui::InputInt("Voxel Y", &melt_params.debug.voxelY);
+                ImGui::InputInt("Voxel Z", &melt_params.debug.voxelZ);
+                ImGui::InputInt("Extent Index", &melt_params.debug.extentIndex);
+                ImGui::InputInt("Extent Max Step", &melt_params.debug.extentMaxStep);
                 ImGui::Checkbox("Show Slice Selection", &show_slice_selection);
                 ImGui::Checkbox("Show Inner", &show_inner);
                 ImGui::Checkbox("Show Outer", &show_outer);
@@ -486,31 +474,31 @@ int main(int argc, char* argv[])
                 ImGui::Checkbox("Show Extent", &show_extent);
                 ImGui::Checkbox("Show Result", &show_result);
 
-                if (show_inner) debug_params.flags |= Melt::DebugTypeShowInner;
-                if (show_slice_selection) debug_params.flags |= Melt::DebugTypeShowSliceSelection;
-                if (show_outer) debug_params.flags |= Melt::DebugTypeShowOuter;
-                if (show_dist) debug_params.flags |= Melt::DebugTypeShowMinDistance;
-                if (show_extent) debug_params.flags |= Melt::DebugTypeShowExtent;
-                if (show_result) debug_params.flags |= Melt::DebugTypeShowResult;
+                if (show_inner) melt_params.debug.flags |= MeltDebugTypeShowInner;
+                if (show_slice_selection) melt_params.debug.flags |= MeltDebugTypeShowSliceSelection;
+                if (show_outer) melt_params.debug.flags |= MeltDebugTypeShowOuter;
+                if (show_dist) melt_params.debug.flags |= MeltDebugTypeShowMinDistance;
+                if (show_extent) melt_params.debug.flags |= MeltDebugTypeShowExtent;
+                if (show_result) melt_params.debug.flags |= MeltDebugTypeShowResult;
 
                 ImGui::Checkbox("Depth Test", &depth_test);
                 if (ImGui::Button("Next Diagonal"))
                 {
-                    debug_params.voxelX++;
-                    debug_params.voxelY++;
-                    debug_params.voxelZ++;
+                    melt_params.debug.voxelX++;
+                    melt_params.debug.voxelY++;
+                    melt_params.debug.voxelZ++;
                 }
                 if (ImGui::Button("Previous Diagonal"))
                 {
-                    debug_params.voxelX--;
-                    debug_params.voxelY--;
-                    debug_params.voxelZ--;
+                    melt_params.debug.voxelX--;
+                    melt_params.debug.voxelY--;
+                    melt_params.debug.voxelZ--;
                 }
             }
             else
             {
-                debug_params.extentIndex = -1;
-                debug_params.flags |= Melt::DebugTypeShowResult;
+                melt_params.debug.extentIndex = -1;
+                melt_params.debug.flags |= MeltDebugTypeShowResult;
             }
             ImGui::End();
         }
@@ -551,10 +539,10 @@ int main(int argc, char* argv[])
                 glBindVertexArray(model_mesh.MeshBuffer.vao);
                 glDrawArrays(GL_TRIANGLES, 0, model_mesh.VertexCount);
             }
-            if (model_mesh.OccluderBuffer.vao && occluder_mesh.indices.size() > 0)
+            if (model_mesh.OccluderBuffer.vao && melt_result.mesh.indices.size() > 0)
             {
                 glBindVertexArray(model_mesh.OccluderBuffer.vao);
-                glDrawElements(GL_TRIANGLES, occluder_mesh.indices.size(), GL_UNSIGNED_SHORT, 0);
+                glDrawElements(GL_TRIANGLES, melt_result.mesh.indices.size(), GL_UNSIGNED_SHORT, 0);
             }
         }
 
@@ -562,18 +550,14 @@ int main(int argc, char* argv[])
         {
             {
                 ScopedTimer scoped_timer;
-                Melt::Result result = Melt::GenerateConservativeOccluder(model_mesh.InputMesh, gen_params, debug_params, occluder_mesh);
-                if (result == Melt::ResulttNonWaterTightMesh)
-                {
-                    printf("Non-watertight mesh detected, you may want to increase voxel resolution\n");
-                }
+                MeltGenerateOccluder(melt_params, melt_result);
             }
 
             glBindBuffer(GL_ARRAY_BUFFER, model_mesh.OccluderBuffer.vbo);
-            glBufferData(GL_ARRAY_BUFFER, occluder_mesh.vertices.size() * sizeof(glm::vec3), occluder_mesh.vertices.data(), GL_STATIC_DRAW);
+            glBufferData(GL_ARRAY_BUFFER, melt_result.mesh.vertices.size() * sizeof(glm::vec3), melt_result.mesh.vertices.data(), GL_STATIC_DRAW);
 
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, model_mesh.OccluderBuffer.indices);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, occluder_mesh.indices.size() * sizeof(GLushort), occluder_mesh.indices.data(), GL_STATIC_DRAW);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, melt_result.mesh.indices.size() * sizeof(GLushort), melt_result.mesh.indices.data(), GL_STATIC_DRAW);
         }
 
         ImGui::Render();
