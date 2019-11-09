@@ -335,32 +335,12 @@ bool EnsureMeshExclusive(const MeltMesh& mesh0, const MeltMesh& mesh1)
     return true;
 }
 
-TEST_CASE("melt.flatten3d", "") 
-{
-#define EXPAND_DIMENSION0(DIM) \
-    for (int x = 0; x < DIM.x; ++x) \
-    for (int y = 0; y < DIM.y; ++y) \
-    for (int z = 0; z < DIM.z; ++z) \
-	   REQUIRE(UnFlatten3d(Flatten3d(uvec3(x, y, z), DIM), DIM) == uvec3(x, y, z));
-
-    #define EXPAND_DIMENSION1(DIM) \
-    for (int i = 0; i < DIM.x * DIM.y * DIM.z; ++i) \
-	   REQUIRE(Flatten3d(UnFlatten3d(i, DIM), DIM) == i);
-
-    EXPAND_DIMENSION0(uvec3(10, 10, 10));
-    EXPAND_DIMENSION0(uvec3(1, 7, 36));
-    EXPAND_DIMENSION0(uvec3(56, 43, 36));
-
-    EXPAND_DIMENSION1(uvec3(10, 10, 10));
-    EXPAND_DIMENSION1(uvec3(1, 7, 36));
-    EXPAND_DIMENSION1(uvec3(56, 43, 36));
-}
-
 TEST_CASE("melt.bunny", "") 
 {
     MeltParams params;
     params.voxelSize = 0.25f;
     params.fillPercentage = 1.0f;
+    params.boxTypeFlags = MeltOccluderBoxTypeRegular;
 
     MeltResult result;
 
@@ -377,6 +357,7 @@ TEST_CASE("melt.suzanne", "")
     MeltParams params;
     params.voxelSize = 0.25f;
     params.fillPercentage = 1.0f;
+    params.boxTypeFlags = MeltOccluderBoxTypeRegular;
 
     MeltResult result;
 
@@ -394,6 +375,7 @@ TEST_CASE("melt.cube", "")
     MeltParams params;
     params.voxelSize = 0.25f;
     params.fillPercentage = 1.0f;
+    params.boxTypeFlags = MeltOccluderBoxTypeRegular;
 
     MeltResult result;
 
@@ -407,6 +389,7 @@ TEST_CASE("melt.sphere", "")
     MeltParams params;
     params.voxelSize = 0.25f;
     params.fillPercentage = 1.0f;
+    params.boxTypeFlags = MeltOccluderBoxTypeRegular;
 
     MeltResult result;
 
@@ -420,6 +403,7 @@ TEST_CASE("melt.teapot", "")
     MeltParams params;
     params.voxelSize = 0.25f;
     params.fillPercentage = 1.0f;
+    params.boxTypeFlags = MeltOccluderBoxTypeRegular;
 
     MeltResult result;
 
@@ -436,6 +420,7 @@ TEST_CASE("melt.column", "")
     MeltParams params;
     params.voxelSize = 0.25f;
     params.fillPercentage = 1.0f;
+    params.boxTypeFlags = MeltOccluderBoxTypeRegular;
 
     MeltResult result;
 

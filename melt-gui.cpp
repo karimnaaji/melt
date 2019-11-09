@@ -430,8 +430,15 @@ int main(int argc, char* argv[])
         static bool show_extent = false;
         static bool show_result = true;
         static bool show_debug_gui = false;
+        static bool box_type_diagonals = false;
+        static bool box_type_top = false;
+        static bool box_type_bottom = false;
+        static bool box_type_sides = false;
+        static bool box_type_regular = true;
         {
             melt_params.debug.flags = 0;
+
+            melt_params.boxTypeFlags = 0;
 
             ImGui::SetNextWindowPos(ImVec2(0, 0));
 
@@ -448,6 +455,18 @@ int main(int argc, char* argv[])
             ImGui::Checkbox("Show Debug Controls", &show_debug_gui);
             ImGui::InputFloat("Voxel Size", &melt_params.voxelSize);
             ImGui::DragFloat("Fill Percentage", &melt_params.fillPercentage, 0.01f, 0.0f, 1.0f);
+
+            ImGui::Checkbox("BoxTypeDiagonals", &box_type_diagonals);
+            ImGui::Checkbox("BoxTypeTop", &box_type_top);
+            ImGui::Checkbox("BoxTypeBottom", &box_type_bottom);
+            ImGui::Checkbox("BoxTypeSides", &box_type_sides);
+            ImGui::Checkbox("BoxTypeRegular", &box_type_regular);
+
+            if (box_type_diagonals) melt_params.boxTypeFlags |= MeltOccluderBoxTypeDiagonals;
+            if (box_type_top) melt_params.boxTypeFlags |= MeltOccluderBoxTypeTop;
+            if (box_type_bottom) melt_params.boxTypeFlags |= MeltOccluderBoxTypeBottom;
+            if (box_type_sides) melt_params.boxTypeFlags |= MeltOccluderBoxTypeSides;
+            if (box_type_regular) melt_params.boxTypeFlags = MeltOccluderBoxTypeRegular;
 
             if (ImGui::Button("Generate"))
             {

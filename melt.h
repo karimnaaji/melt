@@ -47,6 +47,7 @@ struct MeltMesh
 
 enum MeltOccluderBoxType
 {
+    MeltOccluderBoxTypeNone      = 0,
     MeltOccluderBoxTypeDiagonals = 1 << 0,
     MeltOccluderBoxTypeTop       = 1 << 1,
     MeltOccluderBoxTypeBottom    = 1 << 2,
@@ -92,10 +93,10 @@ struct MeltDebugParams
 struct MeltParams
 {
     MeltMesh mesh;
-    MeltOccluderBoxTypeFlags flags;
+    MeltOccluderBoxTypeFlags boxTypeFlags;
+    MeltDebugParams debug;
     float voxelSize;
     float fillPercentage;
-    MeltDebugParams debug;
 };
 
 struct MeltResult
@@ -170,6 +171,38 @@ const u16 VoxelCubeIndices[36] =
     0, 5, 1,
     1, 5, 6,
     1, 6, 2,
+};
+
+const u16 VoxelCubeIndicesSides[24] =
+{
+    0, 1, 2,
+    0, 2, 3,
+    3, 2, 6,
+    3, 6, 7,
+    4, 7, 5,
+    7, 6, 5,
+    0, 4, 5,
+    0, 5, 1,
+};
+
+const u16 VoxelCubeIndicesDiagonals[12] =
+{
+    0, 1, 6,
+    0, 6, 7,
+    4, 5, 2,
+    4, 2, 3,
+};
+
+const u16 VoxelCubeIndicesBottom[6] =
+{
+    1, 5, 6,
+    1, 6, 2,
+};
+
+const u16 VoxelCubeIndicesTop[6] =
+{
+    0, 7, 4,
+    0, 3, 7,
 };
 
 const vec3 VoxelCubeVertices[8] =
@@ -941,30 +974,96 @@ static void UpdateMinDistanceField(const Context& context, const uvec3& start_po
     MELT_PROFILE_END();
 }
 
-static void AddVoxelToMesh(vec3 voxel_center, vec3 half_voxel_size, MeltMesh& mesh)
+static MeltOccluderBoxType SelectVoxelCubeIndices(MeltOccluderBoxTypeFlags box_type_flags, const u16*& out_indices, u16& out_index_length)
+{
+#define CHECK_FLAG(flag) (box_type_flags & flag) == flag
+
+    if (CHECK_FLAG(MeltOccluderBoxTypeRegular))
+    {
+        out_indices = static_cast<const u16*>(VoxelCubeIndices);
+        out_index_length = ARRAY_LENGTH(VoxelCubeIndices);
+        return MeltOccluderBoxTypeRegular;
+    }
+    else if (CHECK_FLAG(MeltOccluderBoxTypeSides))
+    {
+        out_indices = static_cast<const u16*>(VoxelCubeIndicesSides);
+        out_index_length = ARRAY_LENGTH(VoxelCubeIndicesSides);
+        return MeltOccluderBoxTypeSides;
+    }
+    else if (CHECK_FLAG(MeltOccluderBoxTypeBottom))
+    {
+        out_indices = static_cast<const u16*>(VoxelCubeIndicesBottom);
+        out_index_length = ARRAY_LENGTH(VoxelCubeIndicesBottom);
+        return MeltOccluderBoxTypeBottom;
+    }
+    else if (CHECK_FLAG(MeltOccluderBoxTypeTop))
+    {
+        out_indices = static_cast<const u16*>(VoxelCubeIndicesTop);
+        out_index_length = ARRAY_LENGTH(VoxelCubeIndicesTop);
+        return MeltOccluderBoxTypeTop;
+    }
+    else if (CHECK_FLAG(MeltOccluderBoxTypeDiagonals))
+    {
+        out_indices = static_cast<const u16*>(VoxelCubeIndicesDiagonals);
+        out_index_length = ARRAY_LENGTH(VoxelCubeIndicesDiagonals);
+        return MeltOccluderBoxTypeDiagonals;
+    }
+
+#undef CHECK_FLAG
+
+    return MeltOccluderBoxTypeNone;
+}
+
+static void AddVoxelToMesh(vec3 voxel_center, vec3 half_voxel_size, MeltMesh& mesh, MeltOccluderBoxTypeFlags box_type_flags)
 {
     u16 index_offset = (u16)mesh.vertices.size();
-    for (u32 i = 0; i < 8; ++i)
+        
+    for (u32 i = 0; i < ARRAY_LENGTH(VoxelCubeVertices); ++i)
     {
         mesh.vertices.push_back(half_voxel_size * VoxelCubeVertices[i] + voxel_center);
     }
-    for (u32 i = 0; i < ARRAY_LENGTH(VoxelCubeIndices); ++i)
+
+    while (box_type_flags != MeltOccluderBoxTypeNone)
     {
-        mesh.indices.push_back(VoxelCubeIndices[i] + index_offset);
+        const u16* indices = nullptr;
+        u16 indices_length = 0;
+
+        MeltOccluderBoxType selected_type = SelectVoxelCubeIndices(box_type_flags, indices, indices_length);
+
+        MELT_ASSERT(indices && indices_length > 0);
+        for (u32 i = 0; i < indices_length; ++i)
+        {
+            mesh.indices.push_back(indices[i] + index_offset);
+        }
+
+        box_type_flags &= ~selected_type;
     }
 }
 
-static void AddVoxelToMeshColor(vec3 voxel_center, vec3 half_voxel_size, MeltMesh& mesh, const Color3u8& color = Blueviolet)
+static void AddVoxelToMeshColor(vec3 voxel_center, vec3 half_voxel_size, MeltMesh& mesh, MeltOccluderBoxTypeFlags box_type_flags = MeltOccluderBoxTypeRegular, const Color3u8& color = Blueviolet)
 {
     u16 index_offset = (u16)mesh.vertices.size() / 2;
-    for (u32 i = 0; i < 8; ++i)
+
+    for (u32 i = 0; i < ARRAY_LENGTH(VoxelCubeVertices); ++i)
     {
         mesh.vertices.push_back(half_voxel_size * VoxelCubeVertices[i] + voxel_center);
         mesh.vertices.push_back(vec3(color) / 255.0f);
     }
-    for (u32 i = 0; i < ARRAY_LENGTH(VoxelCubeIndices); ++i)
+
+    while (box_type_flags != MeltOccluderBoxTypeNone)
     {
-        mesh.indices.push_back(VoxelCubeIndices[i] + index_offset);
+        const u16* indices = nullptr;
+        u16 indices_length = 0;
+
+        MeltOccluderBoxType selected_type = SelectVoxelCubeIndices(box_type_flags, indices, indices_length);
+
+        MELT_ASSERT(indices && indices_length > 0);
+        for (u32 i = 0; i < indices_length; ++i)
+        {
+            mesh.indices.push_back(indices[i] + index_offset);
+        }
+
+        box_type_flags &= ~selected_type;
     }
 }
 
@@ -1177,7 +1276,7 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
         const auto& extent = max_extents[i];
         vec3 half_extent = vec3(extent.extent) * voxel_extent * 0.5f;
         vec3 aabb_center = mesh_aabb.min + vec3(extent.position) * voxel_extent + half_extent;
-        AddVoxelToMesh(aabb_center + half_voxel_extent, half_extent, out_result.mesh);
+        AddVoxelToMesh(aabb_center + half_voxel_extent, half_extent, out_result.mesh, params.boxTypeFlags);
     }
 
     _Debug_ValidateMaxExtents(max_extents, outer_voxels);
@@ -1285,7 +1384,7 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
                     vec3 half_extent = vec3(extent.extent) * voxel_extent * 0.5f;
                     vec3 aabb_center = mesh_aabb.min + vec3(extent.position) * voxel_extent + half_extent;
                     Color3u8 color = Colors[i % ARRAY_LENGTH(Colors)];
-                    AddVoxelToMeshColor(aabb_center + half_voxel_extent, half_extent, out_result.debugMesh, color);
+                    AddVoxelToMeshColor(aabb_center + half_voxel_extent, half_extent, out_result.debugMesh, params.boxTypeFlags, color);
                 }
             }
         }
