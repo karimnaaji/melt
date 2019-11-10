@@ -14,6 +14,13 @@
 
 #include "minitrace.h"
 
+#include "generated/bunny_obj.h"
+#include "generated/column_obj.h"
+#include "generated/cube_obj.h"
+#include "generated/sphere_obj.h"
+#include "generated/teapot_obj.h"
+#include "generated/suzanne_obj.h"
+
 #include <cassert>
 
 //#define MELT_DEBUG
@@ -128,7 +135,33 @@ static bool LoadModelMesh(const char* model_path, MeltParams& melt_params, Model
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
     std::string error;
-    bool obj_parsing_res = tinyobj::LoadObj(shapes, materials, error, model_path, NULL);
+    bool obj_parsing_res;
+
+    const char* model = nullptr;
+
+    if (strcmp(model_path, "bunny.obj") == 0)
+        model = s_bunny_obj;
+    else if (strcmp(model_path, "column.obj") == 0)
+        model = s_column_obj;
+    else if (strcmp(model_path, "cube.obj") == 0)
+        model = s_cube_obj;
+    else if (strcmp(model_path, "sphere.obj") == 0)
+        model = s_sphere_obj;
+    else if (strcmp(model_path, "suzanne.obj") == 0)
+        model = s_suzanne_obj;
+    else if (strcmp(model_path, "teapot.obj") == 0)
+        model = s_teapot_obj;
+
+    if (model != nullptr)
+    {
+        std::stringstream obj_stream(model);
+        tinyobj::MaterialFileReader material_reader("");
+        obj_parsing_res = tinyobj::LoadObj(shapes, materials, error, obj_stream, material_reader);
+    }
+    else
+    {
+        obj_parsing_res = tinyobj::LoadObj(shapes, materials, error, model_path, NULL);    
+    }    
 
     if (!error.empty()) 
     {
@@ -176,7 +209,7 @@ static bool LoadModelMesh(const char* model_path, MeltParams& melt_params, Model
 
 static Camera FPSCameraViewMatrix(GLFWwindow* window, bool ignore_input)
 {
-    static glm::vec3 position(-4.0f, 5.0f, 1.0f);
+    static glm::vec3 position(-4.0f, 0.0f, 0.0f);
     static float rotation[] = { 0.0f, 0.0f };
     static double lastMouse[] = { 0.0, 0.0 };
     double mouse[2];
@@ -295,7 +328,7 @@ static void SetupIMGUIStyle()
 #endif
 }
 
-static bool ComputeMeshConservativeOcclusion(const char* mesh_path, MeltParams& melt_params, MeltResult melt_result, ModelMesh& out_mesh)
+static bool ComputeMeshConservativeOcclusion(const char* mesh_path, MeltParams& melt_params, MeltResult& melt_result, ModelMesh& out_mesh)
 {
     if (out_mesh.MeshBuffer.vao)
         glDeleteVertexArrays(1, &out_mesh.MeshBuffer.vao);
@@ -420,7 +453,8 @@ int main(int argc, char* argv[])
         glfwPollEvents();
         ImGui_ImplGlfwGL3_NewFrame();
 
-        bool reload = false;
+        bool generate_clicked = false;
+        bool model_selected = false;
         static float alpha = 0.25f;
         static bool depth_test = false;
         static bool show_slice_selection = false;
@@ -435,6 +469,16 @@ int main(int argc, char* argv[])
         static bool box_type_bottom = false;
         static bool box_type_sides = false;
         static bool box_type_regular = true;
+        static const char* obj_models[] = 
+        { 
+            "bunny.obj", 
+            "column.obj", 
+            "cube.obj",
+            "sphere.obj",
+            "suzanne.obj",
+            "teapot.obj",
+        };
+        static int obj_model_index = 0;
         {
             melt_params.debug.flags = 0;
 
@@ -451,6 +495,11 @@ int main(int argc, char* argv[])
             ImGui::Begin("Fixed Overlay", nullptr, ImVec2(0,0), 0.3f, options);
 
             ImGui::Text("Drag and drop an .obj model");
+            
+            if (ImGui::Combo("Obj model", &obj_model_index, obj_models, IM_ARRAYSIZE(obj_models)))
+            {
+                model_selected = true;
+            }
 
             ImGui::Checkbox("Show Debug Controls", &show_debug_gui);
             ImGui::InputFloat("Voxel Size", &melt_params.voxelSize);
@@ -470,7 +519,7 @@ int main(int argc, char* argv[])
 
             if (ImGui::Button("Generate"))
             {
-                reload = true;
+                generate_clicked = true;
             }
 
             if (show_debug_gui)
@@ -565,7 +614,7 @@ int main(int argc, char* argv[])
             }
         }
 
-        if (reload)
+        if (generate_clicked)
         {
             {
                 ScopedTimer scoped_timer;
@@ -577,6 +626,10 @@ int main(int argc, char* argv[])
 
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, model_mesh.OccluderBuffer.indices);
             glBufferData(GL_ELEMENT_ARRAY_BUFFER, melt_result.debugMesh.indices.size() * sizeof(GLushort), melt_result.debugMesh.indices.data(), GL_STATIC_DRAW);
+        }
+        if (model_selected)
+        {
+            ComputeMeshConservativeOcclusion(obj_models[obj_model_index], melt_params, melt_result, model_mesh);
         }
 
         ImGui::Render();
