@@ -30,8 +30,7 @@
 #include <vector>
 
 #ifndef MELT_ASSERT
-#include <cassert>
-#define MELT_ASSERT(stmt) (void)(stmt) //assert(stmt)
+#define MELT_ASSERT(stmt) 
 #endif
 #ifndef MELT_PROFILE_BEGIN
 #define MELT_PROFILE_BEGIN()
@@ -40,49 +39,39 @@
 #define MELT_PROFILE_END()
 #endif
 
-namespace Melt
-{
-
-struct Mesh
+struct MeltMesh
 {
     std::vector<glm::vec3> vertices;
     std::vector<unsigned short> indices;
 };
 
-enum OccluderBoxType
+enum MeltOccluderBoxType
 {
-    OccluderBoxTypeDiagonals = 1 << 0,
-    OccluderBoxTypeTop       = 1 << 1,
-    OccluderBoxTypeBottom    = 1 << 2,
-    OccluderBoxTypeSides     = 1 << 3,
-    OccluderBoxTypeRegular   = OccluderBoxTypeSides | OccluderBoxTypeTop | OccluderBoxTypeBottom,
+    MeltOccluderBoxTypeNone      = 0,
+    MeltOccluderBoxTypeDiagonals = 1 << 0,
+    MeltOccluderBoxTypeTop       = 1 << 1,
+    MeltOccluderBoxTypeBottom    = 1 << 2,
+    MeltOccluderBoxTypeSides     = 1 << 3,
+    MeltOccluderBoxTypeRegular   = MeltOccluderBoxTypeSides | MeltOccluderBoxTypeTop | MeltOccluderBoxTypeBottom,
 };
 
-typedef int OccluderBoxTypeFlags;
+typedef int MeltOccluderBoxTypeFlags;
 
-struct OccluderGenerationParams
+enum MeltDebugType
 {
-    OccluderBoxTypeFlags flags;
-
-    float voxelSize;
-    float fillPercentage;
+    MeltDebugTypeShowInner          = 1 << 0,
+    MeltDebugTypeShowExtent         = 1 << 1,
+    MeltDebugTypeShowResult         = 1 << 2,
+    MeltDebugTypeShowOuter          = 1 << 3,
+    MeltDebugTypeShowMinDistance    = 1 << 4,
+    MeltDebugTypeShowSliceSelection = 1 << 5,
 };
 
-enum DebugType
-{
-    DebugTypeShowInner          = 1 << 0,
-    DebugTypeShowExtent         = 1 << 1,
-    DebugTypeShowResult         = 1 << 2,
-    DebugTypeShowOuter          = 1 << 3,
-    DebugTypeShowMinDistance    = 1 << 4,
-    DebugTypeShowSliceSelection = 1 << 5,
-};
+typedef int MeltDebugTypeFlags;
 
-typedef int DebugTypeFlags;
-
-struct DebugParams
+struct MeltDebugParams
 {
-    DebugTypeFlags flags;
+    MeltDebugTypeFlags flags;
 
     int sliceIndexX;
     int sliceIndexY;
@@ -94,30 +83,33 @@ struct DebugParams
     int extentMaxStep;
 
     float voxelScale;
+
+    MeltDebugParams()
+    {
+        std::memset(this, 0, sizeof(MeltDebugParams));
+    }
 };
 
-struct OccluderBox
+struct MeltParams
 {
-    glm::vec3 center;
-    glm::vec3 halfExtent;
+    MeltMesh mesh;
+    MeltOccluderBoxTypeFlags boxTypeFlags;
+    MeltDebugParams debug;
+    float voxelSize;
+    float fillPercentage;
 };
 
-struct Result
+struct MeltResult
 {
-    Mesh mesh;
-    std::vector<OccluderBox> occluderBoxes;
+    MeltMesh mesh;
+    MeltMesh debugMesh;
 };
 
-void GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationParams& gen_params, const DebugParams& debug_params, Mesh& out_mesh);
-
-} // namespace Melt
+bool MeltGenerateOccluder(const MeltParams& params, MeltResult& result);
 
 #endif // MELT_H
 
 #ifdef MELT_IMPLEMENTATION
-
-namespace Melt
-{
 
 typedef unsigned int    u32;
 typedef unsigned short  u16;
@@ -163,6 +155,66 @@ const Color3u8 Colors[] =
     Lightslategray,
     Darkseagreen,
     Floralwhite,
+};
+
+const u16 VoxelCubeIndices[36] =
+{
+    0, 1, 2,
+    0, 2, 3,
+    3, 2, 6,
+    3, 6, 7,
+    0, 7, 4,
+    0, 3, 7,
+    4, 7, 5,
+    7, 6, 5,
+    0, 4, 5,
+    0, 5, 1,
+    1, 5, 6,
+    1, 6, 2,
+};
+
+const u16 VoxelCubeIndicesSides[24] =
+{
+    0, 1, 2,
+    0, 2, 3,
+    3, 2, 6,
+    3, 6, 7,
+    4, 7, 5,
+    7, 6, 5,
+    0, 4, 5,
+    0, 5, 1,
+};
+
+const u16 VoxelCubeIndicesDiagonals[12] =
+{
+    0, 1, 6,
+    0, 6, 7,
+    4, 5, 2,
+    4, 2, 3,
+};
+
+const u16 VoxelCubeIndicesBottom[6] =
+{
+    1, 5, 6,
+    1, 6, 2,
+};
+
+const u16 VoxelCubeIndicesTop[6] =
+{
+    0, 7, 4,
+    0, 3, 7,
+};
+
+const vec3 VoxelCubeVertices[8] =
+{
+    vec3(-1.0f,  1.0f,  1.0f),
+    vec3(-1.0f, -1.0f,  1.0f),
+    vec3( 1.0f, -1.0f,  1.0f),
+    vec3( 1.0f,  1.0f,  1.0f),
+    vec3(-1.0f,  1.0f, -1.0f),
+    vec3(-1.0f, -1.0f, -1.0f),
+    vec3( 1.0f, -1.0f, -1.0f),
+    vec3( 1.0f,  1.0f, -1.0f),
 };
 
 struct AABB
@@ -245,9 +297,15 @@ using MaxExtents =  std::vector<MaxExtent>;
 
 struct Context
 {
-    VoxelSet scratch;
     uvec3 dimension;
     u32 size;
+};
+
+struct VoxelSetPlanes
+{   
+    std::vector<VoxelSet> x;
+    std::vector<VoxelSet> y;
+    std::vector<VoxelSet> z;
 };
 
 #define ARRAY_LENGTH(array) ((int)(sizeof(array) / sizeof(*array)))
@@ -418,21 +476,34 @@ static bool AABBIntersectsTriangle(const Triangle& triangle, const vec3& aabb_ce
     return true;
 }
 
-static inline u32 Flatten(const uvec3& index, const uvec3& dimension)
+static inline u32 Flatten3d(const uvec3& index, const uvec3& dimension)
 {
     u32 out_index = index.x + dimension.x * index.y + dimension.x * dimension.y * index.z;
+    MELT_ASSERT(out_index < dimension.x * dimension.y * dimension.z);
+    return out_index;
+}
+    
+static inline u32 Flatten2d(const uvec2& index, const uvec2& dimension)
+{
+    u32 out_index = index.x + dimension.x * index.y;
+    MELT_ASSERT(out_index < dimension.x * dimension.y);
     return out_index;
 }
 
-static inline uvec3 UnFlatten(u32 index, const uvec3& dimension)
+static inline uvec3 UnFlatten3d(u32 position, const uvec3& dimension)
 {
     uvec3 out_index;
 
     u32 dim_xy = dimension.x * dimension.y;
-    out_index.z = index / dim_xy;
-    index -= out_index.z * dim_xy;
-    out_index.y = index / dimension.x;
-    out_index.x = index % dimension.x;
+    out_index.z = position / dim_xy;
+    position -= out_index.z * dim_xy;
+    out_index.y = position / dimension.x;
+    out_index.x = position % dimension.x;
+
+    MELT_ASSERT(out_index.x < dimension.x);
+    MELT_ASSERT(out_index.y < dimension.y);
+    MELT_ASSERT(out_index.z < dimension.z);
+
     return out_index;
 }
 
@@ -491,7 +562,7 @@ static AABB GenerateAABB(const Triangle& triangle)
     return aabb;
 }
 
-static AABB GenerateAABB(const Mesh& mesh)
+static AABB GenerateAABB(const MeltMesh& mesh)
 {
     AABB aabb;
 
@@ -507,37 +578,49 @@ static AABB GenerateAABB(const Mesh& mesh)
     return aabb;
 }
 
-static void SelectVoxelsOnXAxis(const VoxelSet& voxel_set, u32 y, u32 z, VoxelSet& out_result)
-{
-    for (u32 i = 0; i < voxel_set.size(); ++i)
-    {
-        if (voxel_set[i].position.y == y && voxel_set[i].position.z == z)
-            out_result.push_back(voxel_set[i]);
-    }
-}
-
-static void SelectVoxelsOnYAxis(const VoxelSet& voxel_set, u32 x, u32 z, VoxelSet& out_result)
-{
-    for (u32 i = 0; i < voxel_set.size(); ++i)
-    {
-        if (voxel_set[i].position.x == x && voxel_set[i].position.z == z)
-            out_result.push_back(voxel_set[i]);
-    }
-}
-
-static void SelectVoxelsOnZAxis(const VoxelSet& voxel_set, u32 x, u32 y, VoxelSet& out_result)
-{
-    for (u32 i = 0; i < voxel_set.size(); ++i)
-    {
-        if (voxel_set[i].position.x == x && voxel_set[i].position.y == y)
-            out_result.push_back(voxel_set[i]);
-    }
-}
-
-static void GetField(Context& context, const VoxelSet& voxel_set, u32 x, u32 y, u32 z, MinDistance& out_min_distance, VoxelStatus& out_status)
+static void GeneratePerPlaneVoxelSet(const Context& context, const VoxelSet& voxel_set, const VoxelIndices& voxel_indices, VoxelSetPlanes& out_voxel_set_planes)
 {
     MELT_PROFILE_BEGIN();
 
+    out_voxel_set_planes.x.resize(context.dimension.y * context.dimension.z);
+    out_voxel_set_planes.y.resize(context.dimension.x * context.dimension.z);
+    out_voxel_set_planes.z.resize(context.dimension.x * context.dimension.y);
+    
+    uvec2 dim_yz = uvec2(context.dimension.y, context.dimension.z);
+    uvec2 dim_xz = uvec2(context.dimension.x, context.dimension.z);
+    uvec2 dim_xy = uvec2(context.dimension.x, context.dimension.y);
+
+    for (u32 x = 0; x < context.dimension.x; ++x)
+    {
+        for (u32 y = 0; y < context.dimension.y; ++y)
+        {
+            for (u32 z = 0; z < context.dimension.z; ++z)
+            {
+                vec3 position(x, y, z);
+                s32 voxel_index = voxel_indices[Flatten3d(position, context.dimension)];
+                if (voxel_index != -1)
+                {
+                    u32 index_yz = Flatten2d(uvec2(y, z), dim_yz);
+                    u32 index_xz = Flatten2d(uvec2(x, z), dim_xz);
+                    u32 index_xy = Flatten2d(uvec2(x, y), dim_xy);
+
+                    VoxelSet& voxels_x_planes = out_voxel_set_planes.x[index_yz];
+                    VoxelSet& voxels_y_planes = out_voxel_set_planes.y[index_xz];
+                    VoxelSet& voxels_z_planes = out_voxel_set_planes.z[index_xy];
+
+                    voxels_x_planes.push_back(voxel_set[voxel_index]);
+                    voxels_y_planes.push_back(voxel_set[voxel_index]);
+                    voxels_z_planes.push_back(voxel_set[voxel_index]);
+                }
+            }
+        }
+    }
+
+    MELT_PROFILE_END();
+}
+
+static void GetField(Context& context, const VoxelSetPlanes& voxel_set_planes, const VoxelIndices& voxel_indices, u32 x, u32 y, u32 z, MinDistance& out_min_distance, VoxelStatus& out_status)
+{
     const svec3 InfiniteDistance = svec3(INT_MAX);
     const svec3 NullDistance = svec3(0);
 
@@ -550,9 +633,10 @@ static void GetField(Context& context, const VoxelSet& voxel_set, u32 x, u32 y, 
     out_status.clipped = false;
     out_status.inner = false;
 
-    context.scratch.clear();
-    SelectVoxelsOnXAxis(voxel_set, y, z, context.scratch);
-    for (const auto& voxel : context.scratch)
+    uvec2 dim_yz = uvec2(context.dimension.y, context.dimension.z);
+    u32 index_yz = Flatten2d(uvec2(y, z), dim_yz);
+    const auto& voxels_x_plane = voxel_set_planes.x[index_yz];
+    for (const auto& voxel : voxels_x_plane)
     {
         s32 distance = voxel.position.x - x;
         if (distance > 0)
@@ -565,9 +649,10 @@ static void GetField(Context& context, const VoxelSet& voxel_set, u32 x, u32 y, 
         else
             out_min_distance.dist.x = 0;
     }
-    context.scratch.clear();
-    SelectVoxelsOnYAxis(voxel_set, x, z, context.scratch);
-    for (const auto& voxel : context.scratch)
+    uvec2 dim_xz = uvec2(context.dimension.x, context.dimension.z);
+    u32 index_xz = Flatten2d(uvec2(x, z), dim_xz);
+    const auto& voxels_y_plane = voxel_set_planes.y[index_xz];
+    for (const auto& voxel : voxels_y_plane)
     {
         s32 distance = voxel.position.y - y;
         if (distance > 0)
@@ -580,9 +665,10 @@ static void GetField(Context& context, const VoxelSet& voxel_set, u32 x, u32 y, 
         else
             out_min_distance.dist.y = 0;
     }
-    context.scratch.clear();
-    SelectVoxelsOnZAxis(voxel_set, x, y, context.scratch);
-    for (const auto& voxel : context.scratch)
+    uvec2 dim_xy = uvec2(context.dimension.x, context.dimension.y);
+    u32 index_xy = Flatten2d(uvec2(x, y), dim_xy);
+    const auto& voxels_z_plane = voxel_set_planes.z[index_xy];
+    for (const auto& voxel : voxels_z_plane)
     {
         s32 distance = voxel.position.z - z;
         if (distance > 0)
@@ -603,11 +689,9 @@ static void GetField(Context& context, const VoxelSet& voxel_set, u32 x, u32 y, 
             out_status.inner = true;
         }
     }
-
-    MELT_PROFILE_END();
 }
 
-static void GenerateFields(Context& context, const VoxelSet& voxel_set, VoxelField& out_voxel_field, MinDistanceField& out_distance_field)
+static void GenerateFields(Context& context, const VoxelSetPlanes& voxel_set_planes, const VoxelIndices& voxel_indices, VoxelField& out_voxel_field, MinDistanceField& out_distance_field)
 {
     MELT_PROFILE_BEGIN();
 
@@ -615,9 +699,9 @@ static void GenerateFields(Context& context, const VoxelSet& voxel_set, VoxelFie
     {
         MinDistance& min_distance = out_distance_field[i];
         VoxelStatus& voxel_status = out_voxel_field[i];
-        const uvec3 position = UnFlatten(i, context.dimension);
+        const uvec3 position = UnFlatten3d(i, context.dimension);
 
-        GetField(context, voxel_set, position.x, position.y, position.z, min_distance, voxel_status);
+        GetField(context, voxel_set_planes, voxel_indices, position.x, position.y, position.z, min_distance, voxel_status);
     }
 
     MELT_PROFILE_END();
@@ -637,7 +721,7 @@ static uvec3 GetMaxAABBExtent(const Context& context, const MinDistanceField& di
     for (u32 z = min_distance.z; z < min_distance.z + min_distance.dist.z; ++z)
     {
         uvec3 z_slice_position = uvec3(min_distance.x, min_distance.y, z);
-        u32 z_slice_index = Flatten(z_slice_position, context.dimension);
+        u32 z_slice_index = Flatten3d(z_slice_position, context.dimension);
 
         MELT_ASSERT(voxel_field[z_slice_index].inner);
 
@@ -656,7 +740,7 @@ static uvec3 GetMaxAABBExtent(const Context& context, const MinDistanceField& di
         while (x < sample_min_distance.x + sample_min_distance.dist.x &&
                y < sample_min_distance.y + sample_min_distance.dist.y)
         {
-            const u32 index = Flatten(uvec3(x, y, z), context.dimension);
+            const u32 index = Flatten3d(uvec3(x, y, z), context.dimension);
             if (InnerVoxel(voxel_field[index]))
             {
                 const MinDistance& distance = distance_field[index];
@@ -715,7 +799,7 @@ static void ClipVoxelField(const Context& context, const uvec3& start_position, 
         {
             for (u32 z = start_position.z; z < start_position.z + extent.z; ++z)
             {
-                u32 index = Flatten(uvec3(x, y, z), context.dimension);
+                u32 index = Flatten3d(uvec3(x, y, z), context.dimension);
                 MELT_ASSERT(!voxel_field[index].clipped && "Clipping already clipped voxel field index");
                 voxel_field[index].clipped = true;
             }
@@ -724,22 +808,64 @@ static void ClipVoxelField(const Context& context, const uvec3& start_position, 
 
     MELT_PROFILE_END();
 }
+    
+static bool WaterTightMesh(const Context& context, const VoxelField& voxel_field, const MinDistanceField& distance_field)
+{
+    for (const auto& min_distance : distance_field)
+    {
+        if (!InnerVoxel(voxel_field[Flatten3d(min_distance.position, context.dimension)]))
+            continue;
+        
+        for (u32 x = min_distance.x; x < min_distance.x + min_distance.dist.x; ++x)
+        {
+            const u32 y = min_distance.y;
+            const u32 z = min_distance.z;
+            const u32 index = Flatten3d(uvec3(x, y, z), context.dimension);
+            if (!InnerVoxel(voxel_field[index]))
+            {
+                return false;
+            }
+        }
+        for (u32 y = min_distance.y; y < min_distance.y + min_distance.dist.y; ++y)
+        {
+            const u32 x = min_distance.x;
+            const u32 z = min_distance.z;
+            const u32 index = Flatten3d(uvec3(x, y, z), context.dimension);
+            if (!InnerVoxel(voxel_field[index]))
+            {
+                return false;
+            }
+        }
+        for (u32 z = min_distance.z; z < min_distance.z + min_distance.dist.z; ++z)
+        {
+            const u32 x = min_distance.x;
+            const u32 y = min_distance.y;
+            const u32 index = Flatten3d(uvec3(x, y, z), context.dimension);
+            if (!InnerVoxel(voxel_field[index]))
+            {
+                return false;
+            }
+        }
+    }
+    
+    return true;
+}
 
 static void _Debug_ValidateMinDistanceField(const Context& context, const VoxelSet& outer_voxels, const VoxelField& voxel_field, const MinDistanceField& distance_field)
 {
-#ifndef MELT_ASSERT
+#ifndef MELT_DEBUG
     return;
 #endif
     for (const auto& min_distance : distance_field)
     {
-        if (!InnerVoxel(voxel_field[Flatten(min_distance.position, context.dimension)]))
+        if (!InnerVoxel(voxel_field[Flatten3d(min_distance.position, context.dimension)]))
             continue;
 
         for (u32 x = min_distance.x; x < min_distance.x + min_distance.dist.x; ++x)
         {
             const u32 y = min_distance.y;
             const u32 z = min_distance.z;
-            const u32 index = Flatten(uvec3(x, y, z), context.dimension);
+            const u32 index = Flatten3d(uvec3(x, y, z), context.dimension);
             for (const Voxel& voxel : outer_voxels)
                 MELT_ASSERT(voxel.position != uvec3(x, y, z));
             MELT_ASSERT(InnerVoxel(voxel_field[index]));
@@ -748,7 +874,7 @@ static void _Debug_ValidateMinDistanceField(const Context& context, const VoxelS
         {
             const u32 x = min_distance.x;
             const u32 z = min_distance.z;
-            const u32 index = Flatten(uvec3(x, y, z), context.dimension);
+            const u32 index = Flatten3d(uvec3(x, y, z), context.dimension);
             for (const Voxel& voxel : outer_voxels)
                 MELT_ASSERT(voxel.position != uvec3(x, y, z));
             MELT_ASSERT(InnerVoxel(voxel_field[index]));
@@ -757,7 +883,7 @@ static void _Debug_ValidateMinDistanceField(const Context& context, const VoxelS
         {
             const u32 x = min_distance.x;
             const u32 y = min_distance.y;
-            const u32 index = Flatten(uvec3(x, y, z), context.dimension);
+            const u32 index = Flatten3d(uvec3(x, y, z), context.dimension);
             for (const Voxel& voxel : outer_voxels)
                 MELT_ASSERT(voxel.position != uvec3(x, y, z));
             MELT_ASSERT(InnerVoxel(voxel_field[index]));
@@ -767,7 +893,7 @@ static void _Debug_ValidateMinDistanceField(const Context& context, const VoxelS
 
 static void _Debug_ValidateMaxExtents(const MaxExtents& max_extents, const VoxelSet& outer_voxels)
 {
-#ifndef MELT_ASSERT
+#ifndef MELT_DEBUG
     return;
 #endif
     for (u32 i = 0; i < max_extents.size(); ++i)
@@ -802,7 +928,7 @@ static void UpdateMinDistanceField(const Context& context, const uvec3& start_po
         {
             for (u32 z = start_position.z; z < start_position.z + extent.z; ++z)
             {
-                const u32 index = Flatten(uvec3(x, y, z), context.dimension);
+                const u32 index = Flatten3d(uvec3(x, y, z), context.dimension);
                 if (InnerVoxel(voxel_field[index]))
                 {
                     MinDistance& min_distance = distance_field[index];
@@ -818,7 +944,7 @@ static void UpdateMinDistanceField(const Context& context, const uvec3& start_po
         {
             for (u32 z = start_position.z; z < start_position.z + extent.z; ++z)
             {
-                const u32 index = Flatten(uvec3(x, y, z), context.dimension);
+                const u32 index = Flatten3d(uvec3(x, y, z), context.dimension);
                 if (InnerVoxel(voxel_field[index]))
                 {
                     MinDistance& min_distance = distance_field[index];
@@ -834,7 +960,7 @@ static void UpdateMinDistanceField(const Context& context, const uvec3& start_po
         {
             for (u32 z = start_position.z - 1; z != ~0U; --z)
             {
-                const u32 index = Flatten(uvec3(x, y, z), context.dimension);
+                const u32 index = Flatten3d(uvec3(x, y, z), context.dimension);
                 if (InnerVoxel(voxel_field[index]))
                 {
                     MinDistance& min_distance = distance_field[index];
@@ -848,53 +974,104 @@ static void UpdateMinDistanceField(const Context& context, const uvec3& start_po
     MELT_PROFILE_END();
 }
 
-static void AddVoxelToMesh(vec3 voxel_center, vec3 half_voxel_size, Mesh& mesh, const Color3u8& color = Blueviolet)
+static MeltOccluderBoxType SelectVoxelCubeIndices(MeltOccluderBoxTypeFlags box_type_flags, const u16*& out_indices, u16& out_index_length)
 {
-    const u16 VoxelCubeIndices[36] =
-    {
-        0, 1, 2,
-        0, 2, 3,
-        3, 2, 6,
-        3, 6, 7,
-        0, 7, 4,
-        0, 3, 7,
-        4, 7, 5,
-        7, 6, 5,
-        0, 4, 5,
-        0, 5, 1,
-        1, 5, 6,
-        1, 6, 2,
-    };
+#define CHECK_FLAG(flag) (box_type_flags & flag) == flag
 
-    const vec3 VoxelCubeVertices[8] =
+    if (CHECK_FLAG(MeltOccluderBoxTypeRegular))
     {
-        vec3(-1.0f,  1.0f,  1.0f),
-        vec3(-1.0f, -1.0f,  1.0f),
-        vec3( 1.0f, -1.0f,  1.0f),
-        vec3( 1.0f,  1.0f,  1.0f),
-        vec3(-1.0f,  1.0f, -1.0f),
-        vec3(-1.0f, -1.0f, -1.0f),
-        vec3( 1.0f, -1.0f, -1.0f),
-        vec3( 1.0f,  1.0f, -1.0f),
-    };
+        out_indices = static_cast<const u16*>(VoxelCubeIndices);
+        out_index_length = ARRAY_LENGTH(VoxelCubeIndices);
+        return MeltOccluderBoxTypeRegular;
+    }
+    else if (CHECK_FLAG(MeltOccluderBoxTypeSides))
+    {
+        out_indices = static_cast<const u16*>(VoxelCubeIndicesSides);
+        out_index_length = ARRAY_LENGTH(VoxelCubeIndicesSides);
+        return MeltOccluderBoxTypeSides;
+    }
+    else if (CHECK_FLAG(MeltOccluderBoxTypeBottom))
+    {
+        out_indices = static_cast<const u16*>(VoxelCubeIndicesBottom);
+        out_index_length = ARRAY_LENGTH(VoxelCubeIndicesBottom);
+        return MeltOccluderBoxTypeBottom;
+    }
+    else if (CHECK_FLAG(MeltOccluderBoxTypeTop))
+    {
+        out_indices = static_cast<const u16*>(VoxelCubeIndicesTop);
+        out_index_length = ARRAY_LENGTH(VoxelCubeIndicesTop);
+        return MeltOccluderBoxTypeTop;
+    }
+    else if (CHECK_FLAG(MeltOccluderBoxTypeDiagonals))
+    {
+        out_indices = static_cast<const u16*>(VoxelCubeIndicesDiagonals);
+        out_index_length = ARRAY_LENGTH(VoxelCubeIndicesDiagonals);
+        return MeltOccluderBoxTypeDiagonals;
+    }
 
+#undef CHECK_FLAG
+
+    return MeltOccluderBoxTypeNone;
+}
+
+static void AddVoxelToMesh(vec3 voxel_center, vec3 half_voxel_size, MeltMesh& mesh, MeltOccluderBoxTypeFlags box_type_flags)
+{
+    u16 index_offset = (u16)mesh.vertices.size();
+        
+    for (u32 i = 0; i < ARRAY_LENGTH(VoxelCubeVertices); ++i)
+    {
+        mesh.vertices.push_back(half_voxel_size * VoxelCubeVertices[i] + voxel_center);
+    }
+
+    while (box_type_flags != MeltOccluderBoxTypeNone)
+    {
+        const u16* indices = nullptr;
+        u16 indices_length = 0;
+
+        MeltOccluderBoxType selected_type = SelectVoxelCubeIndices(box_type_flags, indices, indices_length);
+
+        MELT_ASSERT(indices && indices_length > 0);
+        for (u32 i = 0; i < indices_length; ++i)
+        {
+            mesh.indices.push_back(indices[i] + index_offset);
+        }
+
+        box_type_flags &= ~selected_type;
+    }
+}
+
+static void AddVoxelToMeshColor(vec3 voxel_center, vec3 half_voxel_size, MeltMesh& mesh, MeltOccluderBoxTypeFlags box_type_flags = MeltOccluderBoxTypeRegular, const Color3u8& color = Blueviolet)
+{
     u16 index_offset = (u16)mesh.vertices.size() / 2;
-    for (u32 i = 0; i < 8; ++i)
+
+    for (u32 i = 0; i < ARRAY_LENGTH(VoxelCubeVertices); ++i)
     {
         mesh.vertices.push_back(half_voxel_size * VoxelCubeVertices[i] + voxel_center);
         mesh.vertices.push_back(vec3(color) / 255.0f);
     }
-    for (u32 i = 0; i < ARRAY_LENGTH(VoxelCubeIndices); ++i)
+
+    while (box_type_flags != MeltOccluderBoxTypeNone)
     {
-        mesh.indices.push_back(VoxelCubeIndices[i] + index_offset);
+        const u16* indices = nullptr;
+        u16 indices_length = 0;
+
+        MeltOccluderBoxType selected_type = SelectVoxelCubeIndices(box_type_flags, indices, indices_length);
+
+        MELT_ASSERT(indices && indices_length > 0);
+        for (u32 i = 0; i < indices_length; ++i)
+        {
+            mesh.indices.push_back(indices[i] + index_offset);
+        }
+
+        box_type_flags &= ~selected_type;
     }
 }
 
-static void AddVoxelSetToMesh(const VoxelSet& voxel_set, const vec3& half_voxel_extent, Mesh& mesh)
+static void AddVoxelSetToMesh(const VoxelSet& voxel_set, const vec3& half_voxel_extent, MeltMesh& mesh)
 {
     for (const Voxel& voxel : voxel_set)
     {
-        AddVoxelToMesh(voxel.aabb.Center(), half_voxel_extent, mesh);
+        AddVoxelToMeshColor(voxel.aabb.Center(), half_voxel_extent, mesh);
     }
 }
 
@@ -909,7 +1086,7 @@ static MaxExtent GetMaxExtent(const Context& context, const VoxelField& voxel_fi
 
     for (auto& min_distance : distance_field)
     {
-        VoxelStatus voxel_status = voxel_field[Flatten(min_distance.position, context.dimension)];
+        VoxelStatus voxel_status = voxel_field[Flatten3d(min_distance.position, context.dimension)];
         if (InnerVoxel(voxel_status))
         {
             uvec3 extent = GetMaxAABBExtent(context, distance_field, voxel_field, min_distance);
@@ -928,68 +1105,76 @@ static MaxExtent GetMaxExtent(const Context& context, const VoxelField& voxel_fi
     return max_extent;
 }
 
-void GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationParams& gen_params, const DebugParams& debug_params, Mesh& out_mesh)
+bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
 {
-    out_mesh.vertices.clear();
-    out_mesh.indices.clear();
+    out_result.debugMesh.vertices.clear();
+    out_result.debugMesh.indices.clear();
+    out_result.mesh.vertices.clear();
+    out_result.mesh.indices.clear();
 
-    vec3 voxel_extent(gen_params.voxelSize);
+    vec3 voxel_extent(params.voxelSize);
     vec3 half_voxel_extent = voxel_extent * 0.5f;
 
-    AABB mesh_aabb = GenerateAABB(mesh);
+    AABB mesh_aabb = GenerateAABB(params.mesh);
 
-    mesh_aabb.min = MapToVoxelMinBound(mesh_aabb.min, gen_params.voxelSize) - voxel_extent;
-    mesh_aabb.max = MapToVoxelMaxBound(mesh_aabb.max, gen_params.voxelSize) + voxel_extent;
+    mesh_aabb.min = MapToVoxelMinBound(mesh_aabb.min, params.voxelSize) - voxel_extent;
+    mesh_aabb.max = MapToVoxelMaxBound(mesh_aabb.max, params.voxelSize) + voxel_extent;
 
     vec3 mesh_extent = mesh_aabb.max - mesh_aabb.min;
-    vec3 voxel_count = mesh_extent / gen_params.voxelSize;
+    vec3 voxel_count = mesh_extent / params.voxelSize;
 
     Context context;
     context.dimension = uvec3(voxel_count);
-    context.size = u32(voxel_count.x * voxel_count.y * voxel_count.z);
-    context.scratch.reserve(context.size);
+    context.size = u32(voxel_count.x) * u32(voxel_count.y) * u32(voxel_count.z);
 
     VoxelIndices voxel_indices(context.size, -1);
     VoxelSet outer_voxels;
     outer_voxels.reserve(context.size);
 
     // Perform shell voxelization
-    for (u32 i = 0; i < mesh.indices.size(); i += 3)
+    for (u32 i = 0; i < params.mesh.indices.size(); i += 3)
     {
         MELT_PROFILE_BEGIN();
 
         Triangle triangle;
 
-        triangle.v0 = mesh.vertices[mesh.indices[i + 0]];
-        triangle.v1 = mesh.vertices[mesh.indices[i + 1]];
-        triangle.v2 = mesh.vertices[mesh.indices[i + 2]];
+        triangle.v0 = params.mesh.vertices[params.mesh.indices[i + 0]];
+        triangle.v1 = params.mesh.vertices[params.mesh.indices[i + 1]];
+        triangle.v2 = params.mesh.vertices[params.mesh.indices[i + 2]];
 
         AABB triangle_aabb = GenerateAABB(triangle);
 
         // Voxel snapping, snap the triangle extent to find the 3d grid to iterate on.
-        triangle_aabb.min = MapToVoxelMinBound(triangle_aabb.min, gen_params.voxelSize) - voxel_extent;
-        triangle_aabb.max = MapToVoxelMaxBound(triangle_aabb.max, gen_params.voxelSize) + voxel_extent;
+        triangle_aabb.min = MapToVoxelMinBound(triangle_aabb.min, params.voxelSize) - voxel_extent;
+        triangle_aabb.max = MapToVoxelMaxBound(triangle_aabb.max, params.voxelSize) + voxel_extent;
 
-        for (f32 x = triangle_aabb.min.x; x <= triangle_aabb.max.x; x += gen_params.voxelSize)
+        for (f32 x = triangle_aabb.min.x; x <= triangle_aabb.max.x; x += params.voxelSize)
         {
-            for (f32 y = triangle_aabb.min.y; y <= triangle_aabb.max.y; y += gen_params.voxelSize)
+            for (f32 y = triangle_aabb.min.y; y <= triangle_aabb.max.y; y += params.voxelSize)
             {
-                for (f32 z = triangle_aabb.min.z; z <= triangle_aabb.max.z; z += gen_params.voxelSize)
+                for (f32 z = triangle_aabb.min.z; z <= triangle_aabb.max.z; z += params.voxelSize)
                 {
                     Voxel voxel;
 
                     voxel.aabb.min = vec3(x, y, z) - half_voxel_extent;
                     voxel.aabb.max = vec3(x, y, z) + half_voxel_extent;
 
+                    MELT_ASSERT(voxel.aabb.min.x >= mesh_aabb.min.x - half_voxel_extent.x);
+                    MELT_ASSERT(voxel.aabb.min.y >= mesh_aabb.min.y - half_voxel_extent.y);
+                    MELT_ASSERT(voxel.aabb.min.z >= mesh_aabb.min.z - half_voxel_extent.z);
+
+                    MELT_ASSERT(voxel.aabb.max.x <= mesh_aabb.max.x + half_voxel_extent.x);
+                    MELT_ASSERT(voxel.aabb.max.y <= mesh_aabb.max.y + half_voxel_extent.y);
+                    MELT_ASSERT(voxel.aabb.max.z <= mesh_aabb.max.z + half_voxel_extent.z);
+
                     vec3 voxel_center = voxel.aabb.Center();
                     vec3 relative_to_origin = voxel_center - mesh_aabb.min - half_voxel_extent;
 
                     if (!AABBIntersectsTriangle(triangle, voxel_center, half_voxel_extent))
                         continue;
-
                     voxel.position = uvec3((relative_to_origin / mesh_extent) * voxel_count);
 
-                    const u32 index = Flatten(voxel.position, context.dimension);
+                    const u32 index = Flatten3d(voxel.position, context.dimension);
                     if (voxel_indices[index] != -1)
                         continue;
 
@@ -1001,6 +1186,11 @@ void GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
 
         MELT_PROFILE_END();
     }
+
+    VoxelSetPlanes voxel_set_planes;
+
+    // Generate a flat voxel list per plane (x,y), (x,z), (y,z)
+    GeneratePerPlaneVoxelSet(context, outer_voxels, voxel_indices, voxel_set_planes);
 
     // The minimum distance field is a data structure representing, for each voxel,
     // the minimum distance that we can go in each of the positive directions x, y,
@@ -1016,14 +1206,19 @@ void GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
 
     // Generate the minimum distance field, and voxel status from the initial shell.
 
-    GenerateFields(context, outer_voxels, voxel_field, min_distance_field);
+    GenerateFields(context, voxel_set_planes, voxel_indices, voxel_field, min_distance_field);
+
+    if (!WaterTightMesh(context, voxel_field, min_distance_field))
+    {
+        return false;
+    }
 
     _Debug_ValidateMinDistanceField(context, outer_voxels, voxel_field, min_distance_field);
 
     std::vector<MaxExtent> max_extents;
-    if (debug_params.extentMaxStep != 0)
+    if (params.debug.extentMaxStep != 0)
     {
-        for (u32 i = 0; i < debug_params.extentMaxStep; ++i)
+        for (u32 i = 0; i < params.debug.extentMaxStep; ++i)
         {
             MaxExtent max_extent = GetMaxExtent(context, voxel_field, min_distance_field);
 
@@ -1045,7 +1240,7 @@ void GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
         // Approximate the volume of the mesh by the number of voxels that can fit within.
         for (auto& min_distance : min_distance_field)
         {
-            VoxelStatus voxel_status = voxel_field[Flatten(min_distance.position, context.dimension)];
+            VoxelStatus voxel_status = voxel_field[Flatten3d(min_distance.position, context.dimension)];
 
             // Each inner voxel adds one unit to the volume.
             if (InnerVoxel(voxel_status))
@@ -1059,7 +1254,7 @@ void GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
         // . Update the minimum distance field by adjusting the distances on the set
         //    of inner voxels. This is done by extending the extent cube to infinity
         //    on each of the axes +x, +y, +z
-        while (fillPercentage < gen_params.fillPercentage && volume != total_volume)
+        while (fillPercentage < params.fillPercentage && volume != total_volume)
         {
             MaxExtent max_extent = GetMaxExtent(context, voxel_field, min_distance_field);
 
@@ -1076,79 +1271,92 @@ void GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
         }
     }
 
+    for (u32 i = 0; i < max_extents.size(); ++i)
+    {
+        const auto& extent = max_extents[i];
+        vec3 half_extent = vec3(extent.extent) * voxel_extent * 0.5f;
+        vec3 aabb_center = mesh_aabb.min + vec3(extent.position) * voxel_extent + half_extent;
+        AddVoxelToMesh(aabb_center + half_voxel_extent, half_extent, out_result.mesh, params.boxTypeFlags);
+    }
+
     _Debug_ValidateMaxExtents(max_extents, outer_voxels);
 
-    if (debug_params.flags > 0)
+    if (params.debug.flags > 0)
     {
-        if (debug_params.flags & DebugTypeShowOuter)
+        // AddVoxelToMeshColor(mesh_aabb.Center(), (mesh_aabb.max - mesh_aabb.min) * 0.5f, out_result.debugMesh, Colors[0]);
+
+        if (params.debug.flags & MeltDebugTypeShowOuter)
         {
-            AddVoxelSetToMesh(outer_voxels, half_voxel_extent * debug_params.voxelScale, out_mesh);
+            AddVoxelSetToMesh(outer_voxels, half_voxel_extent * params.debug.voxelScale, out_result.debugMesh);
         }
-        if (debug_params.flags & DebugTypeShowSliceSelection)
+        if (params.debug.flags & MeltDebugTypeShowSliceSelection)
         {
-            if (debug_params.voxelY > 0 && debug_params.voxelZ > 0)
+            if (params.debug.voxelY > 0 && params.debug.voxelZ > 0)
             {
-                SelectVoxelsOnXAxis(outer_voxels, debug_params.voxelY, debug_params.voxelZ, context.scratch);
-                AddVoxelSetToMesh(context.scratch, half_voxel_extent * debug_params.voxelScale, out_mesh);
+                u32 index = Flatten2d(uvec2(params.debug.voxelY, params.debug.voxelZ), uvec2(context.dimension.y, context.dimension.z));
+                VoxelSet& voxels_x_planes = voxel_set_planes.x[index];
+                AddVoxelSetToMesh(voxels_x_planes, half_voxel_extent * params.debug.voxelScale, out_result.debugMesh);
             }
-            if (debug_params.voxelX > 0 && debug_params.voxelZ > 0)
+            if (params.debug.voxelX > 0 && params.debug.voxelZ > 0)
             {
-                SelectVoxelsOnYAxis(outer_voxels, debug_params.voxelX, debug_params.voxelZ, context.scratch);
-                AddVoxelSetToMesh(context.scratch, half_voxel_extent * debug_params.voxelScale, out_mesh);
+                u32 index = Flatten2d(uvec2(params.debug.voxelX, params.debug.voxelZ), uvec2(context.dimension.x, context.dimension.z));
+                VoxelSet& voxels_y_planes = voxel_set_planes.y[index];
+                AddVoxelSetToMesh(voxels_y_planes, half_voxel_extent * params.debug.voxelScale, out_result.debugMesh);
             }
-            if (debug_params.voxelX > 0 && debug_params.voxelY > 0)
+            if (params.debug.voxelX > 0 && params.debug.voxelY > 0)
             {
-                SelectVoxelsOnZAxis(outer_voxels, debug_params.voxelX, debug_params.voxelY, context.scratch);
-                AddVoxelSetToMesh(context.scratch, half_voxel_extent * debug_params.voxelScale, out_mesh);
+                u32 index = Flatten2d(uvec2(params.debug.voxelX, params.debug.voxelY), uvec2(context.dimension.x, context.dimension.y));
+                VoxelSet& voxels_z_planes = voxel_set_planes.z[index];
+                AddVoxelSetToMesh(voxels_z_planes, half_voxel_extent * params.debug.voxelScale, out_result.debugMesh);
             }
         }
-        if (debug_params.flags & DebugTypeShowInner)
+        if (params.debug.flags & MeltDebugTypeShowInner)
         {
             for (const auto& min_distance : min_distance_field)
             {
-                const u32 index = Flatten(min_distance.position, context.dimension);
+                const u32 index = Flatten3d(min_distance.position, context.dimension);
                 if (!voxel_field[index].inner)
                     continue;
 
                 vec3 voxel_center = mesh_aabb.min + vec3(min_distance.position) * voxel_extent;
-                if (debug_params.voxelX < 0 ||
-                    debug_params.voxelY < 0 ||
-                    debug_params.voxelZ < 0)
+                if (params.debug.voxelX < 0 ||
+                    params.debug.voxelY < 0 ||
+                    params.debug.voxelZ < 0)
                 {
-                    AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, out_mesh);
+                    AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
                 }
             }
         }
-        if (debug_params.flags & DebugTypeShowMinDistance)
+        if (params.debug.flags & MeltDebugTypeShowMinDistance)
         {
             for (const auto& min_distance : min_distance_field)
             {
                 vec3 voxel_center = mesh_aabb.min + vec3(min_distance.position) * voxel_extent;
-                if (debug_params.voxelX == min_distance.x &&
-                    debug_params.voxelY == min_distance.y &&
-                    debug_params.voxelZ == min_distance.z)
+                if (params.debug.voxelX == min_distance.x &&
+                    params.debug.voxelY == min_distance.y &&
+                    params.debug.voxelZ == min_distance.z)
                 {
-                    AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, out_mesh);
+                    AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
 
                     for (u32 x = min_distance.x; x < min_distance.x + min_distance.dist.x; ++x)
                     {
                         vec3 voxel_center = mesh_aabb.min + vec3(x, min_distance.y, min_distance.z) * voxel_extent;
-                        AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, out_mesh);
+                        AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
                     }
                     for (u32 y = min_distance.y; y < min_distance.y + min_distance.dist.y; ++y)
                     {
                         vec3 voxel_center = mesh_aabb.min + vec3(min_distance.x, y, min_distance.z) * voxel_extent;
-                        AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, out_mesh);
+                        AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
                     }
                     for (u32 z = min_distance.z; z < min_distance.z + min_distance.dist.z; ++z)
                     {
                         vec3 voxel_center = mesh_aabb.min + vec3(min_distance.x, min_distance.y, z) * voxel_extent;
-                        AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, out_mesh);
+                        AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
                     }
                 }
             }
         }
-        if (debug_params.flags & DebugTypeShowExtent)
+        if (params.debug.flags & MeltDebugTypeShowExtent)
         {
             for (const auto& min_distance : min_distance_field)
             {
@@ -1160,29 +1368,29 @@ void GenerateConservativeOccluder(const Mesh& mesh, const OccluderGenerationPara
                         for (u32 z = min_distance.z; z < min_distance.z + max_extent.z; ++z)
                         {
                             vec3 voxel_center = mesh_aabb.min + vec3(x, y, z) * voxel_extent;
-                            AddVoxelToMesh(voxel_center + voxel_extent, half_voxel_extent, out_mesh);
+                            AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
                         }
                     }
                 }
             }
         }
-        if (debug_params.flags & DebugTypeShowResult)
+        if (params.debug.flags & MeltDebugTypeShowResult)
         {
             for (u32 i = 0; i < max_extents.size(); ++i)
             {
                 const auto& extent = max_extents[i];
-                if (i == debug_params.extentIndex || debug_params.extentIndex < 0)
+                if (i == params.debug.extentIndex || params.debug.extentIndex < 0)
                 {
                     vec3 half_extent = vec3(extent.extent) * voxel_extent * 0.5f;
                     vec3 aabb_center = mesh_aabb.min + vec3(extent.position) * voxel_extent + half_extent;
                     Color3u8 color = Colors[i % ARRAY_LENGTH(Colors)];
-                    AddVoxelToMesh(aabb_center + half_voxel_extent, half_extent, out_mesh, color);
+                    AddVoxelToMeshColor(aabb_center + half_voxel_extent, half_extent, out_result.debugMesh, params.boxTypeFlags, color);
                 }
             }
         }
     }
-}
 
-} // namespace Melt
+    return true;
+}
 
 #endif // MELT_IMPLEMENTATION
