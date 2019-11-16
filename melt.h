@@ -28,6 +28,7 @@
 #include "glm/glm.hpp"
 
 #include <vector>
+#include <string.h> // memset
 
 #ifndef MELT_ASSERT
 #define MELT_ASSERT(stmt) (void)(stmt)
