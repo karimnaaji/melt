@@ -30,7 +30,7 @@
 #include <vector>
 
 #ifndef MELT_ASSERT
-#define MELT_ASSERT(stmt) 
+#define MELT_ASSERT(stmt) (void)(stmt)
 #endif
 #ifndef MELT_PROFILE_BEGIN
 #define MELT_PROFILE_BEGIN()
@@ -853,9 +853,7 @@ static bool WaterTightMesh(const Context& context, const VoxelField& voxel_field
 
 static void _Debug_ValidateMinDistanceField(const Context& context, const VoxelSet& outer_voxels, const VoxelField& voxel_field, const MinDistanceField& distance_field)
 {
-#ifndef MELT_DEBUG
-    return;
-#endif
+#if defined(MELT_DEBUG) && defined(MELT_ASSERT)
     for (const auto& min_distance : distance_field)
     {
         if (!InnerVoxel(voxel_field[Flatten3d(min_distance.position, context.dimension)]))
@@ -889,13 +887,12 @@ static void _Debug_ValidateMinDistanceField(const Context& context, const VoxelS
             MELT_ASSERT(InnerVoxel(voxel_field[index]));
         }
     }
+#endif
 }
 
 static void _Debug_ValidateMaxExtents(const MaxExtents& max_extents, const VoxelSet& outer_voxels)
 {
-#ifndef MELT_DEBUG
-    return;
-#endif
+#if defined(MELT_DEBUG) && defined(MELT_ASSERT)
     for (u32 i = 0; i < max_extents.size(); ++i)
     {
         const auto& extent = max_extents[i];
@@ -913,6 +910,7 @@ static void _Debug_ValidateMaxExtents(const MaxExtents& max_extents, const Voxel
             }
         }
     }
+#endif
 }
 
 static void UpdateMinDistanceField(const Context& context, const uvec3& start_position, const uvec3& extent, const VoxelField& voxel_field, MinDistanceField& distance_field)
@@ -1040,6 +1038,7 @@ static void AddVoxelToMesh(vec3 voxel_center, vec3 half_voxel_size, MeltMesh& me
     }
 }
 
+#if defined(MELT_DEBUG)
 static void AddVoxelToMeshColor(vec3 voxel_center, vec3 half_voxel_size, MeltMesh& mesh, MeltOccluderBoxTypeFlags box_type_flags = MeltOccluderBoxTypeRegular, const Color3u8& color = Blueviolet)
 {
     u16 index_offset = (u16)mesh.vertices.size() / 2;
@@ -1074,6 +1073,7 @@ static void AddVoxelSetToMesh(const VoxelSet& voxel_set, const vec3& half_voxel_
         AddVoxelToMeshColor(voxel.aabb.Center(), half_voxel_extent, mesh);
     }
 }
+#endif
 
 static MaxExtent GetMaxExtent(const Context& context, const VoxelField& voxel_field, const MinDistanceField& distance_field)
 {
@@ -1218,7 +1218,7 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
     std::vector<MaxExtent> max_extents;
     if (params.debug.extentMaxStep != 0)
     {
-        for (u32 i = 0; i < params.debug.extentMaxStep; ++i)
+        for (s32 i = 0; i < params.debug.extentMaxStep; ++i)
         {
             MaxExtent max_extent = GetMaxExtent(context, voxel_field, min_distance_field);
 
@@ -1281,6 +1281,7 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
 
     _Debug_ValidateMaxExtents(max_extents, outer_voxels);
 
+#if defined(MELT_DEBUG)
     if (params.debug.flags > 0)
     {
         // AddVoxelToMeshColor(mesh_aabb.Center(), (mesh_aabb.max - mesh_aabb.min) * 0.5f, out_result.debugMesh, Colors[0]);
@@ -1332,9 +1333,9 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
             for (const auto& min_distance : min_distance_field)
             {
                 vec3 voxel_center = mesh_aabb.min + vec3(min_distance.position) * voxel_extent;
-                if (params.debug.voxelX == min_distance.x &&
-                    params.debug.voxelY == min_distance.y &&
-                    params.debug.voxelZ == min_distance.z)
+                if (u32(params.debug.voxelX) == min_distance.x &&
+                    u32(params.debug.voxelY) == min_distance.y &&
+                    u32(params.debug.voxelZ) == min_distance.z)
                 {
                     AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
 
@@ -1376,10 +1377,10 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
         }
         if (params.debug.flags & MeltDebugTypeShowResult)
         {
-            for (u32 i = 0; i < max_extents.size(); ++i)
+            for (size_t i = 0; i < max_extents.size(); ++i)
             {
                 const auto& extent = max_extents[i];
-                if (i == params.debug.extentIndex || params.debug.extentIndex < 0)
+                if (s32(i) == params.debug.extentIndex || params.debug.extentIndex < 0)
                 {
                     vec3 half_extent = vec3(extent.extent) * voxel_extent * 0.5f;
                     vec3 aabb_center = mesh_aabb.min + vec3(extent.position) * voxel_extent + half_extent;
@@ -1389,6 +1390,7 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
             }
         }
     }
+#endif
 
     return true;
 }
