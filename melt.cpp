@@ -1,3 +1,4 @@
+#define MELT_DEBUG
 #define MELT_IMPLEMENTATION
 #include "melt.h"
 

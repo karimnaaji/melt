@@ -1050,7 +1050,7 @@ static void _Debug_ValidateMaxExtents(const MaxExtents& max_extents, const Voxel
                 {
                     for (const Voxel& voxel : outer_voxels)
                     {
-                        MELT_ASSERT(!uvec3_equals(voxel.position, uvec3_t(x, y, z)));
+                        MELT_ASSERT(!uvec3_equals(voxel.position, uvec3_new(x, y, z)));
                     }
                 }
             }
@@ -1192,8 +1192,9 @@ static void AddVoxelToMeshColor(vec3_t voxel_center, vec3_t half_voxel_size, Mel
 
     for (u32 i = 0; i < ARRAY_LENGTH(VoxelCubeVertices); ++i)
     {
-        mesh.vertices.push_back(half_voxel_size * VoxelCubeVertices[i] + voxel_center);
-        mesh.vertices.push_back(vec3_new(color) / 255.0f);
+        vec3_t vertex = vec3_add(vec3_mul(half_voxel_size, VoxelCubeVertices[i]), voxel_center);
+        mesh.vertices.push_back(vertex);
+        mesh.vertices.push_back(vec3_div(vec3_new(color), 255.0f));
     }
 
     while (box_type_flags != MeltOccluderBoxTypeNone)
@@ -1425,7 +1426,7 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
         const MaxExtent& extent = max_extents[i];
         vec3_t half_extent = vec3_mul(vec3_new(extent.extent), half_voxel_extent);
         vec3_t voxel_position = vec3_mul(vec3_new(extent.position), voxel_extent);
-        vec3_t voxel_position_biased_to_center = vec3_add(vec3_mul(vec3_new(extent.position), voxel_extent), half_extent);
+        vec3_t voxel_position_biased_to_center = vec3_add(voxel_position, half_extent);
         vec3_t aabb_center = vec3_add(mesh_aabb.min, voxel_position_biased_to_center);
         AddVoxelToMesh(vec3_add(aabb_center, half_voxel_extent), half_extent, out_result.mesh, params.boxTypeFlags);
     }
@@ -1439,7 +1440,7 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
 
         if (params.debug.flags & MeltDebugTypeShowOuter)
         {
-            AddVoxelSetToMesh(outer_voxels, half_voxel_extent * params.debug.voxelScale, out_result.debugMesh);
+            AddVoxelSetToMesh(outer_voxels, vec3_mul(half_voxel_extent, params.debug.voxelScale), out_result.debugMesh);
         }
         if (params.debug.flags & MeltDebugTypeShowSliceSelection)
         {
@@ -1447,19 +1448,19 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
             {
                 u32 index = Flatten2d(uvec2_new(params.debug.voxelY, params.debug.voxelZ), uvec2_new(context.dimension.y, context.dimension.z));
                 VoxelSet& voxels_x_planes = voxel_set_planes.x[index];
-                AddVoxelSetToMesh(voxels_x_planes, half_voxel_extent * params.debug.voxelScale, out_result.debugMesh);
+                AddVoxelSetToMesh(voxels_x_planes, vec3_mul(half_voxel_extent, params.debug.voxelScale), out_result.debugMesh);
             }
             if (params.debug.voxelX > 0 && params.debug.voxelZ > 0)
             {
                 u32 index = Flatten2d(uvec2_new(params.debug.voxelX, params.debug.voxelZ), uvec2_new(context.dimension.x, context.dimension.z));
                 VoxelSet& voxels_y_planes = voxel_set_planes.y[index];
-                AddVoxelSetToMesh(voxels_y_planes, half_voxel_extent * params.debug.voxelScale, out_result.debugMesh);
+                AddVoxelSetToMesh(voxels_y_planes, vec3_mul(half_voxel_extent, params.debug.voxelScale), out_result.debugMesh);
             }
             if (params.debug.voxelX > 0 && params.debug.voxelY > 0)
             {
                 u32 index = Flatten2d(uvec2_new(params.debug.voxelX, params.debug.voxelY), uvec2_new(context.dimension.x, context.dimension.y));
                 VoxelSet& voxels_z_planes = voxel_set_planes.z[index];
-                AddVoxelSetToMesh(voxels_z_planes, half_voxel_extent * params.debug.voxelScale, out_result.debugMesh);
+                AddVoxelSetToMesh(voxels_z_planes, vec3_mul(half_voxel_extent, params.debug.voxelScale), out_result.debugMesh);
             }
         }
         if (params.debug.flags & MeltDebugTypeShowInner)
@@ -1470,12 +1471,13 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
                 if (!voxel_field[index].inner)
                     continue;
 
-                vec3_t voxel_center = mesh_aabb.min + vec3_t(min_distance.position) * voxel_extent;
+                vec3_t voxel_position = vec3_mul(vec3_new(min_distance.position), voxel_extent);
+                vec3_t voxel_center = vec3_add(mesh_aabb.min, voxel_position);
                 if (params.debug.voxelX < 0 ||
                     params.debug.voxelY < 0 ||
                     params.debug.voxelZ < 0)
                 {
-                    AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
+                    AddVoxelToMeshColor(vec3_add(voxel_center, voxel_extent), half_voxel_extent, out_result.debugMesh);
                 }
             }
         }
@@ -1483,27 +1485,27 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
         {
             for (const auto& min_distance : min_distance_field)
             {
-                vec3_t voxel_center = mesh_aabb.min + vec3_t(min_distance.position) * voxel_extent;
+                vec3_t voxel_center = vec3_add(mesh_aabb.min, vec3_mul(vec3_new(min_distance.position), voxel_extent));
                 if (u32(params.debug.voxelX) == min_distance.x &&
                     u32(params.debug.voxelY) == min_distance.y &&
                     u32(params.debug.voxelZ) == min_distance.z)
                 {
-                    AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
+                    AddVoxelToMeshColor(vec3_add(voxel_center, voxel_extent), half_voxel_extent, out_result.debugMesh);
 
                     for (u32 x = min_distance.x; x < min_distance.x + min_distance.dist.x; ++x)
                     {
-                        vec3_t voxel_center = mesh_aabb.min + vec3_t(x, min_distance.y, min_distance.z) * voxel_extent;
-                        AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
+                        vec3_t voxel_center = vec3_add(mesh_aabb.min, vec3_mul(vec3_new(x, min_distance.y, min_distance.z), voxel_extent));
+                        AddVoxelToMeshColor(vec3_add(voxel_center, voxel_extent), half_voxel_extent, out_result.debugMesh);
                     }
                     for (u32 y = min_distance.y; y < min_distance.y + min_distance.dist.y; ++y)
                     {
-                        vec3_t voxel_center = mesh_aabb.min + vec3_t(min_distance.x, y, min_distance.z) * voxel_extent;
-                        AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
+                        vec3_t voxel_center = vec3_add(mesh_aabb.min, vec3_mul(vec3_new(min_distance.x, y, min_distance.z), voxel_extent));
+                        AddVoxelToMeshColor(vec3_add(voxel_center, voxel_extent), half_voxel_extent, out_result.debugMesh);
                     }
                     for (u32 z = min_distance.z; z < min_distance.z + min_distance.dist.z; ++z)
                     {
-                        vec3_t voxel_center = mesh_aabb.min + vec3_t(min_distance.x, min_distance.y, z) * voxel_extent;
-                        AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
+                        vec3_t voxel_center = vec3_add(mesh_aabb.min, vec3_mul(vec3_new(min_distance.x, min_distance.y, z), voxel_extent));
+                        AddVoxelToMeshColor(vec3_add(voxel_center, voxel_extent), half_voxel_extent, out_result.debugMesh);
                     }
                 }
             }
@@ -1519,8 +1521,8 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
                     {
                         for (u32 z = min_distance.z; z < min_distance.z + max_extent.z; ++z)
                         {
-                            vec3_t voxel_center = mesh_aabb.min + vec3_t(x, y, z) * voxel_extent;
-                            AddVoxelToMeshColor(voxel_center + voxel_extent, half_voxel_extent, out_result.debugMesh);
+                            vec3_t voxel_center = vec3_add(mesh_aabb.min, vec3_mul(vec3_new(x, y, z), voxel_extent));
+                            AddVoxelToMeshColor(vec3_add(voxel_center, voxel_extent), half_voxel_extent, out_result.debugMesh);
                         }
                     }
                 }
@@ -1530,13 +1532,15 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
         {
             for (size_t i = 0; i < max_extents.size(); ++i)
             {
-                const auto& extent = max_extents[i];
+                const MaxExtent& extent = max_extents[i];
                 if (s32(i) == params.debug.extentIndex || params.debug.extentIndex < 0)
                 {
-                    vec3_t half_extent = vec3_t(extent.extent) * voxel_extent * 0.5f;
-                    vec3_t aabb_center = mesh_aabb.min + vec3_t(extent.position) * voxel_extent + half_extent;
+                    vec3_t half_extent = vec3_mul(vec3_new(extent.extent), half_voxel_extent);
+                    vec3_t voxel_position = vec3_mul(vec3_new(extent.position), voxel_extent);
+                    vec3_t voxel_position_biased_to_center = vec3_add(voxel_position, half_extent);
+                    vec3_t aabb_center = vec3_add(mesh_aabb.min, voxel_position_biased_to_center);
                     Color3u8 color = Colors[i % ARRAY_LENGTH(Colors)];
-                    AddVoxelToMeshColor(aabb_center + half_voxel_extent, half_extent, out_result.debugMesh, params.boxTypeFlags, color);
+                    AddVoxelToMeshColor(vec3_add(aabb_center, half_voxel_extent), half_extent, out_result.debugMesh, params.boxTypeFlags, color);
                 }
             }
         }
