@@ -10,8 +10,7 @@ else()
 endif()
 
 include_directories(${PROJECT_SOURCE_DIR})
-include_directories(deps/glm)
 
 add_executable(compile-check melt.cpp)
 
-#add_subdirectory(${PROJECT_SOURCE_DIR}/tests)
+add_subdirectory(${PROJECT_SOURCE_DIR}/tests)

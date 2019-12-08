@@ -26,7 +26,7 @@
 #define MELT_H
 
 #include <vector>
-#include <string.h> // memset
+#include <stdint.h>
 
 #ifndef MELT_ASSERT
 #define MELT_ASSERT(stmt) (void)(stmt)
@@ -71,7 +71,8 @@ enum MeltDebugType
 typedef int MeltDebugTypeFlags;
 
 struct MeltDebugParams
-{
+{    
+    uint32_t _start_canary;
     MeltDebugTypeFlags flags;
 
     int sliceIndexX;
@@ -85,10 +86,7 @@ struct MeltDebugParams
 
     float voxelScale;
 
-    MeltDebugParams()
-    {
-        std::memset(this, 0, sizeof(MeltDebugParams));
-    }
+    uint32_t _end_canary;
 };
 
 struct MeltParams
@@ -245,6 +243,11 @@ float float_max(float a, float b) {
     return a > b ? a : b;
 }
 
+u32 u32_min(u32 a, u32 b)
+{
+    return a > b ? a : b;
+}
+
 vec3_t vec3_min(vec3_t a, vec3_t b) {
     float x = float_min(a.x, b.x);
     float y = float_min(a.y, b.y);
@@ -257,12 +260,6 @@ vec3_t vec3_max(vec3_t a, vec3_t b) {
     float y = float_max(a.y, b.y);
     float z = float_max(a.z, b.z);
     return vec3_new(x, y, z);
-}
-
-template<typename T>
-static T Min(T a, T b)
-{
-    return a < b ? a : b;
 }
 
 typedef uvec3_t Color3u8;
@@ -790,7 +787,7 @@ static void GetField(Context& context, const VoxelSetPlanes& voxel_set_planes, c
         if (distance > 0)
         {
             out_status.visibility |= VisibilityPlusX;
-            out_min_distance.dist.x = Min(out_min_distance.dist.x, distance);
+            out_min_distance.dist.x = u32_min(out_min_distance.dist.x, distance);
         }
         else if (distance < 0)
             out_status.visibility |= VisibilityMinusX;
@@ -806,7 +803,7 @@ static void GetField(Context& context, const VoxelSetPlanes& voxel_set_planes, c
         if (distance > 0)
         {
             out_status.visibility |= VisibilityPlusY;
-            out_min_distance.dist.y = Min(out_min_distance.dist.y, distance);
+            out_min_distance.dist.y = u32_min(out_min_distance.dist.y, distance);
         }
         else if (distance < 0)
             out_status.visibility |= VisibilityMinusY;
@@ -822,7 +819,7 @@ static void GetField(Context& context, const VoxelSetPlanes& voxel_set_planes, c
         if (distance > 0)
         {
             out_status.visibility |= VisibilityPlusZ;
-            out_min_distance.dist.z = Min(out_min_distance.dist.z, distance);
+            out_min_distance.dist.z = u32_min(out_min_distance.dist.z, distance);
         }
         else if (distance < 0)
             out_status.visibility |= VisibilityMinusZ;
@@ -890,8 +887,8 @@ static uvec3_t GetMaxAABBExtent(const Context& context, const MinDistanceField& 
             if (InnerVoxel(voxel_field[index]))
             {
                 const MinDistance& distance = distance_field[index];
-                max_extent.x = Min(distance.dist.x + i, max_extent.x);
-                max_extent.y = Min(distance.dist.y + i, max_extent.y);
+                max_extent.x = u32_min(distance.dist.x + i, max_extent.x);
+                max_extent.y = u32_min(distance.dist.y + i, max_extent.y);
             }
             else
             {
@@ -916,8 +913,8 @@ static uvec3_t GetMaxAABBExtent(const Context& context, const MinDistanceField& 
 
     for (const uvec2_t& extent : max_aabb_extents)
     {
-        min_extent.x = Min(extent.x, min_extent.x);
-        min_extent.y = Min(extent.y, min_extent.y);
+        min_extent.x = u32_min(extent.x, min_extent.x);
+        min_extent.y = u32_min(extent.y, min_extent.y);
 
         const u32 volume = min_extent.x * min_extent.y * z_slice;
         if (volume > max_volume)
@@ -1077,7 +1074,7 @@ static void UpdateMinDistanceField(const Context& context, const uvec3_t& start_
                 {
                     MinDistance& min_distance = distance_field[index];
                     const u32 updated_distance_x = start_position.x - min_distance.x;
-                    min_distance.dist.x = Min<u32>(updated_distance_x, min_distance.dist.x);
+                    min_distance.dist.x = u32_min(updated_distance_x, min_distance.dist.x);
                 }
             }
         }
@@ -1093,7 +1090,7 @@ static void UpdateMinDistanceField(const Context& context, const uvec3_t& start_
                 {
                     MinDistance& min_distance = distance_field[index];
                     const u32 updated_distance_y = start_position.y - min_distance.y;
-                    min_distance.dist.y = Min<u32>(updated_distance_y, min_distance.dist.y);
+                    min_distance.dist.y = u32_min(updated_distance_y, min_distance.dist.y);
                 }
             }
         }
@@ -1109,7 +1106,7 @@ static void UpdateMinDistanceField(const Context& context, const uvec3_t& start_
                 {
                     MinDistance& min_distance = distance_field[index];
                     const u32 updated_distance_z = start_position.z - min_distance.z;
-                    min_distance.dist.z = Min<u32>(updated_distance_z, min_distance.dist.z);
+                    min_distance.dist.z = u32_min(updated_distance_z, min_distance.dist.z);
                 }
             }
         }
@@ -1424,16 +1421,20 @@ bool MeltGenerateOccluder(const MeltParams& params, MeltResult& out_result)
     for (u32 i = 0; i < max_extents.size(); ++i)
     {
         const MaxExtent& extent = max_extents[i];
+
         vec3_t half_extent = vec3_mul(vec3_new(extent.extent), half_voxel_extent);
         vec3_t voxel_position = vec3_mul(vec3_new(extent.position), voxel_extent);
         vec3_t voxel_position_biased_to_center = vec3_add(voxel_position, half_extent);
         vec3_t aabb_center = vec3_add(mesh_aabb.min, voxel_position_biased_to_center);
+
         AddVoxelToMesh(vec3_add(aabb_center, half_voxel_extent), half_extent, out_result.mesh, params.boxTypeFlags);
     }
 
     _Debug_ValidateMaxExtents(max_extents, outer_voxels);
 
 #if defined(MELT_DEBUG)
+    MELT_ASSERT(params.debug._start_canary == 0 && params.debug._end_canary == 0 && "Make sure to memset MeltDebugParams to 0 before use");
+
     if (params.debug.flags > 0)
     {
         // AddVoxelToMeshColor(aabb_center(mesh_aabb), (mesh_aabb.max - mesh_aabb.min) * 0.5f, out_result.debugMesh, Colors[0]);
