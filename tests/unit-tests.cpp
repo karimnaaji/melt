@@ -1,7 +1,7 @@
 #define CATCH_CONFIG_MAIN
 #include "catch.hpp"
-#define MELT_DEBUG
-#define MELT_ASSERT(stmt) assert(stmt)
+//#define MELT_DEBUG
+//#define MELT_ASSERT(stmt) assert(stmt)
 #define MELT_IMPLEMENTATION
 #include "melt.h"
 #define TINYOBJLOADER_IMPLEMENTATION
@@ -299,9 +299,9 @@ bool EnsureMeshExclusive(const MeltMesh& mesh0, const MeltMesh& mesh1)
 {
     for (u32 i = 0; i < mesh0.indices.size(); i += 3)
     {
-        vec3 v0 = mesh0.vertices[mesh0.indices[i + 0]];
-        vec3 v1 = mesh0.vertices[mesh0.indices[i + 1]];
-        vec3 v2 = mesh0.vertices[mesh0.indices[i + 2]];
+        vec3_t v0 = mesh0.vertices[mesh0.indices[i + 0]];
+        vec3_t v1 = mesh0.vertices[mesh0.indices[i + 1]];
+        vec3_t v2 = mesh0.vertices[mesh0.indices[i + 2]];
 
         float e1[3], e2[3];
         float normal[3];
@@ -313,9 +313,9 @@ bool EnsureMeshExclusive(const MeltMesh& mesh0, const MeltMesh& mesh1)
 
         for (u32 j = 0; j < mesh1.indices.size(); j += 3)
         {
-            vec3 u0 = mesh1.vertices[mesh1.indices[j + 0]];
-            vec3 u1 = mesh1.vertices[mesh1.indices[j + 1]];
-            vec3 u2 = mesh1.vertices[mesh1.indices[j + 2]];
+            vec3_t u0 = mesh1.vertices[mesh1.indices[j + 0]];
+            vec3_t u1 = mesh1.vertices[mesh1.indices[j + 1]];
+            vec3_t u2 = mesh1.vertices[mesh1.indices[j + 2]];
 
             float p0[3];
             // Point lies on plane
