@@ -267,7 +267,7 @@ int tri_tri_intersect(float V0[3], float V1[3], float V2[3], float U0[3], float 
 }
 
 
-static bool LoadModelMesh(const char* model_path, MeltParams& melt_params)
+static bool LoadModelMesh(const char* model_path, melt_params_t& melt_params)
 {
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
@@ -295,7 +295,7 @@ static bool LoadModelMesh(const char* model_path, MeltParams& melt_params)
     return true;
 }
 
-bool EnsureMeshExclusive(const MeltMesh& mesh0, const MeltMesh& mesh1)
+bool EnsureMeshExclusive(const melt_mesh_t& mesh0, const melt_mesh_t& mesh1)
 {
     for (u32 i = 0; i < mesh0.indices.size(); i += 3)
     {
@@ -345,100 +345,100 @@ bool EnsureMeshExclusive(const MeltMesh& mesh0, const MeltMesh& mesh1)
 
 TEST_CASE("melt.bunny", "") 
 {
-    MeltParams params;
-    memset(&params.debug, 0, sizeof(MeltDebugParams));
-    params.voxelSize = 0.25f;
-    params.fillPercentage = 1.0f;
-    params.boxTypeFlags = MeltOccluderBoxTypeRegular;
+    melt_params_t params;
+    memset(&params.debug, 0, sizeof(melt_debug_params_t));
+    params.voxel_size = 0.25f;
+    params.fill_pct = 1.0f;
+    params.box_type_flags = MELT_OCCLUDER_BOX_TYPE_REGULAR;
 
-    MeltResult result;
+    melt_result_t result;
 
     REQUIRE(LoadModelMesh("models/bunny.obj", params));
-    REQUIRE(MeltGenerateOccluder(params, result));
+    REQUIRE(melt_generate_occluder(params, result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
 
-    params.voxelSize = 0.05f;
-    REQUIRE(!MeltGenerateOccluder(params, result));
+    params.voxel_size = 0.05f;
+    REQUIRE(!melt_generate_occluder(params, result));
 }
 
 TEST_CASE("melt.suzanne", "") 
 {
-    MeltParams params;
-    memset(&params.debug, 0, sizeof(MeltDebugParams));
-    params.voxelSize = 0.25f;
-    params.fillPercentage = 1.0f;
-    params.boxTypeFlags = MeltOccluderBoxTypeRegular;
+    melt_params_t params;
+    memset(&params.debug, 0, sizeof(melt_debug_params_t));
+    params.voxel_size = 0.25f;
+    params.fill_pct = 1.0f;
+    params.box_type_flags = MELT_OCCLUDER_BOX_TYPE_REGULAR;
 
-    MeltResult result;
+    melt_result_t result;
 
     REQUIRE(LoadModelMesh("models/suzanne.obj", params));
-    REQUIRE(MeltGenerateOccluder(params, result));
+    REQUIRE(melt_generate_occluder(params, result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
 
-    params.voxelSize = 0.15f;
-    REQUIRE(MeltGenerateOccluder(params, result));
+    params.voxel_size = 0.15f;
+    REQUIRE(melt_generate_occluder(params, result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
 }
 
 TEST_CASE("melt.cube", "") 
 {
-    MeltParams params;
-    memset(&params.debug, 0, sizeof(MeltDebugParams));
-    params.voxelSize = 0.25f;
-    params.fillPercentage = 1.0f;
-    params.boxTypeFlags = MeltOccluderBoxTypeRegular;
+    melt_params_t params;
+    memset(&params.debug, 0, sizeof(melt_debug_params_t));
+    params.voxel_size = 0.25f;
+    params.fill_pct = 1.0f;
+    params.box_type_flags = MELT_OCCLUDER_BOX_TYPE_REGULAR;
 
-    MeltResult result;
+    melt_result_t result;
 
     REQUIRE(LoadModelMesh("models/cube.obj", params));
-    REQUIRE(MeltGenerateOccluder(params, result));
+    REQUIRE(melt_generate_occluder(params, result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
 }
 
 TEST_CASE("melt.sphere", "") 
 {
-    MeltParams params;
-    memset(&params.debug, 0, sizeof(MeltDebugParams));
-    params.voxelSize = 0.25f;
-    params.fillPercentage = 1.0f;
-    params.boxTypeFlags = MeltOccluderBoxTypeRegular;
+    melt_params_t params;
+    memset(&params.debug, 0, sizeof(melt_debug_params_t));
+    params.voxel_size = 0.25f;
+    params.fill_pct = 1.0f;
+    params.box_type_flags = MELT_OCCLUDER_BOX_TYPE_REGULAR;
 
-    MeltResult result;
+    melt_result_t result;
 
     REQUIRE(LoadModelMesh("models/sphere.obj", params));
-    REQUIRE(MeltGenerateOccluder(params, result));
+    REQUIRE(melt_generate_occluder(params, result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
 }
 
 TEST_CASE("melt.teapot", "") 
 {
-    MeltParams params;
-    memset(&params.debug, 0, sizeof(MeltDebugParams));
-    params.voxelSize = 0.25f;
-    params.fillPercentage = 1.0f;
-    params.boxTypeFlags = MeltOccluderBoxTypeRegular;
+    melt_params_t params;
+    memset(&params.debug, 0, sizeof(melt_debug_params_t));
+    params.voxel_size = 0.25f;
+    params.fill_pct = 1.0f;
+    params.box_type_flags = MELT_OCCLUDER_BOX_TYPE_REGULAR;
 
-    MeltResult result;
+    melt_result_t result;
 
     REQUIRE(LoadModelMesh("models/teapot.obj", params));
-    REQUIRE(!MeltGenerateOccluder(params, result));
+    REQUIRE(!melt_generate_occluder(params, result));
 
-    params.voxelSize = 0.5f;
-    REQUIRE(MeltGenerateOccluder(params, result));
+    params.voxel_size = 0.5f;
+    REQUIRE(melt_generate_occluder(params, result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
 }
 
 TEST_CASE("melt.column", "") 
 {
-    MeltParams params;
-    memset(&params.debug, 0, sizeof(MeltDebugParams));
-    params.voxelSize = 0.25f;
-    params.fillPercentage = 1.0f;
-    params.boxTypeFlags = MeltOccluderBoxTypeRegular;
+    melt_params_t params;
+    memset(&params.debug, 0, sizeof(melt_debug_params_t));
+    params.voxel_size = 0.25f;
+    params.fill_pct = 1.0f;
+    params.box_type_flags = MELT_OCCLUDER_BOX_TYPE_REGULAR;
 
-    MeltResult result;
+    melt_result_t result;
 
     REQUIRE(LoadModelMesh("models/column.obj", params));
-    REQUIRE(MeltGenerateOccluder(params, result));
+    REQUIRE(melt_generate_occluder(params, result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));  
 }
