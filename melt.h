@@ -117,6 +117,7 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& result);
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4244) // 'unsigned int' to 'float', possible loss of data
+#pragma warning(disable:4201) // nonstandard extension used: nameless struct/union
 #endif
 
 #include <math.h>  // fabsf
@@ -181,7 +182,7 @@ typedef struct
     f32 distance;
 } _plane_t;
 
-struct _min_distance_t
+typedef struct
 {
     svec3_t dist;
     union
@@ -194,7 +195,7 @@ struct _min_distance_t
         };
         uvec3_t position;
     };
-};
+} _min_distance_t;
 
 typedef struct
 {
@@ -1533,18 +1534,18 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
 
                     for (u32 x = min_distance.x; x < min_distance.x + min_distance.dist.x; ++x)
                     {
-                        vec3_t voxel_center = _vec3_add(mesh_aabb.min, _vec3_mul(_vec3_init(x, min_distance.y, min_distance.z), voxel_extent));
-                        _add_voxel_with_color_to_mesh(_vec3_add(voxel_center, voxel_extent), half_voxel_extent, out_result.debug_mesh);
+                        vec3_t voxel_center_x = _vec3_add(mesh_aabb.min, _vec3_mul(_vec3_init(x, min_distance.y, min_distance.z), voxel_extent));
+                        _add_voxel_with_color_to_mesh(_vec3_add(voxel_center_x, voxel_extent), half_voxel_extent, out_result.debug_mesh);
                     }
                     for (u32 y = min_distance.y; y < min_distance.y + min_distance.dist.y; ++y)
                     {
-                        vec3_t voxel_center = _vec3_add(mesh_aabb.min, _vec3_mul(_vec3_init(min_distance.x, y, min_distance.z), voxel_extent));
-                        _add_voxel_with_color_to_mesh(_vec3_add(voxel_center, voxel_extent), half_voxel_extent, out_result.debug_mesh);
+                        vec3_t voxel_center_y = _vec3_add(mesh_aabb.min, _vec3_mul(_vec3_init(min_distance.x, y, min_distance.z), voxel_extent));
+                        _add_voxel_with_color_to_mesh(_vec3_add(voxel_center_y, voxel_extent), half_voxel_extent, out_result.debug_mesh);
                     }
                     for (u32 z = min_distance.z; z < min_distance.z + min_distance.dist.z; ++z)
                     {
-                        vec3_t voxel_center = _vec3_add(mesh_aabb.min, _vec3_mul(_vec3_init(min_distance.x, min_distance.y, z), voxel_extent));
-                        _add_voxel_with_color_to_mesh(_vec3_add(voxel_center, voxel_extent), half_voxel_extent, out_result.debug_mesh);
+                        vec3_t voxel_center_z = _vec3_add(mesh_aabb.min, _vec3_mul(_vec3_init(min_distance.x, min_distance.y, z), voxel_extent));
+                        _add_voxel_with_color_to_mesh(_vec3_add(voxel_center_z, voxel_extent), half_voxel_extent, out_result.debug_mesh);
                     }
                 }
             }
