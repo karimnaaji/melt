@@ -104,15 +104,20 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& result);
 #ifndef MELT_PROFILE_END
 #define MELT_PROFILE_END()
 #endif
-#ifndef MELT_CUSTOM_ALLOCATOR
-#include <string.h>
-#define MELT_ALLOC(T, N) ((T*)malloc(N * sizeof(T)))
+#ifndef MELT_MALLOC
+#include <stdlib.h>
+#define MELT_MALLOC(T, N) ((T*)malloc(N * sizeof(T)))
 #define MELT_FREE(T) free(T)
 #endif
 
 #endif // MELT_H
 
 #ifdef MELT_IMPLEMENTATION
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4244) // 'unsigned int' to 'float', possible loss of data
+#endif
 
 #include <math.h>  // fabsf
 #include <float.h> // FLT_MAX
@@ -225,7 +230,6 @@ typedef struct
 } _array_t;
 
 typedef std::vector<_voxel_t> _voxel_set_t;
-typedef std::vector<_min_distance_t> _min_distance_field_t;
 typedef std::vector<_max_extent_t> _max_extents_t;
 
 typedef struct
@@ -235,12 +239,10 @@ typedef struct
 
     s32* voxel_indices;    
     _voxel_status_t* voxel_field;
+    _min_distance_t* min_distance_field;
 
     _voxel_t* voxel_set;
     u32 voxel_set_count;
-
-    _min_distance_t* min_distance_field;
-    u32 min_distance_field_count;
 
     _max_extent_t* max_extents;
     u32 max_extents_count;
@@ -337,30 +339,6 @@ static const vec3_t _voxel_cube_vertices[8] =
     { 1.0f,  1.0f, -1.0f},
 };
 
-#if 0
-static _array_t _array_init(u32 element_capacity, u32 element_byte_size)
-{
-    _array_t array;
-    array.element_count = 0;
-    array.element_capacity = element_capacity;
-    array.element_byte_size = element_byte_size;
-    array.data = MELT_ALLOC(element_byte_size * element_capacity);
-    return array;
-}
-
-static void _array_deinit(_array_t array)
-{
-    FREE(array.data);
-}
-
-static void _array_push(_array_t array, void* element)
-{
-    MELT_ASSERT(array.element_count + 1 <= array.element_capacity);
-    ++array.element_count;
-    array.data + 
-}
-#endif
-
 static vec3_t _vec3_init(float x, float y, float z)
 {
     vec3_t v;
@@ -406,10 +384,10 @@ static vec3_t _vec3_div(vec3_t v, float divisor)
 static uvec3_t _uvec3_init(float x, float y, float z)
 {
     uvec3_t v;
-    v.x = x;
-    v.y = y;
-    v.z = z;
-    return v;    
+    v.x = (u32)x;
+    v.y = (u32)y;
+    v.z = (u32)z;
+    return v;
 }
 
 static vec3_t _vec3_sub(vec3_t a, vec3_t b)
@@ -890,13 +868,13 @@ static void _get_field(_context_t& context, const _voxel_set_planes_t& voxel_set
     }
 }
 
-static void _generate_fields(_context_t& context, const _voxel_set_planes_t& voxel_set_planes, _min_distance_field_t& out_distance_field)
+static void _generate_fields(_context_t& context, const _voxel_set_planes_t& voxel_set_planes)
 {
     MELT_PROFILE_BEGIN();
 
     for (u32 i = 0; i < context.size; ++i)
     {
-        _min_distance_t& min_distance = out_distance_field[i];
+        _min_distance_t& min_distance = context.min_distance_field[i];
         _voxel_status_t& voxel_status = context.voxel_field[i];
         const uvec3_t position = _unflatten_3d(i, context.dimension);
         _get_field(context, voxel_set_planes, position.x, position.y, position.z, min_distance, voxel_status);
@@ -910,7 +888,7 @@ static inline bool _inner_voxel(_voxel_status_t voxel_status)
     return voxel_status.inner && !voxel_status.clipped;
 }
 
-static uvec3_t _get_max_aabb_extent(const _context_t& context, const _min_distance_field_t& distance_field, const _min_distance_t& min_distance)
+static uvec3_t _get_max_aabb_extent(const _context_t& context, const _min_distance_t& min_distance)
 {
     MELT_PROFILE_BEGIN();
 
@@ -926,7 +904,7 @@ static uvec3_t _get_max_aabb_extent(const _context_t& context, const _min_distan
         if (context.voxel_field[z_slice_index].clipped)
             continue;
 
-        const _min_distance_t& sample_min_distance = distance_field[z_slice_index];
+        const _min_distance_t& sample_min_distance = context.min_distance_field[z_slice_index];
 
         uvec2_t max_extent = uvec2_new(sample_min_distance.dist.x, sample_min_distance.dist.y);
 
@@ -939,7 +917,7 @@ static uvec3_t _get_max_aabb_extent(const _context_t& context, const _min_distan
             const u32 index = _flatten_3d(_uvec3_init(x, y, z), context.dimension);
             if (_inner_voxel(context.voxel_field[index]))
             {
-                const _min_distance_t& distance = distance_field[index];
+                const _min_distance_t& distance = context.min_distance_field[index];
                 max_extent.x = _u32_min(distance.dist.x + i, max_extent.x);
                 max_extent.y = _u32_min(distance.dist.y + i, max_extent.y);
             }
@@ -1005,10 +983,11 @@ static void _clip_voxel_field(const _context_t& context, const uvec3_t start_pos
     MELT_PROFILE_END();
 }
     
-static bool _water_tight_mesh(const _context_t& context, const _min_distance_field_t& distance_field)
+static bool _water_tight_mesh(const _context_t& context)
 {
-    for (const auto& min_distance : distance_field)
+    for (u32 i = 0; i < context.size; ++i)
     {
+        const _min_distance_t& min_distance = context.min_distance_field[i];
         if (!_inner_voxel(context.voxel_field[_flatten_3d(min_distance.position, context.dimension)]))
             continue;
         
@@ -1047,11 +1026,12 @@ static bool _water_tight_mesh(const _context_t& context, const _min_distance_fie
     return true;
 }
 
-static void _debug_validate_min_distance_field(const _context_t& context, const _voxel_set_t& outer_voxels, const _min_distance_field_t& distance_field)
+static void _debug_validate_min_distance_field(const _context_t& context, const _voxel_set_t& outer_voxels)
 {
 #if defined(MELT_DEBUG) && defined(MELT_ASSERT)
-    for (const auto& min_distance : distance_field)
+    for (u32 i = 0; i < context.size; ++i)
     {
+        const _min_distance_t& min_distance = context.min_distance_field[i];
         if (!_inner_voxel(context.voxel_field[_flatten_3d(min_distance.position, context.dimension)]))
             continue;
 
@@ -1109,7 +1089,7 @@ static void _debug_validate_max_extents(const _max_extents_t& max_extents, const
 #endif
 }
 
-static void _update_min_distance_field(const _context_t& context, const uvec3_t& start_position, const uvec3_t& extent, _min_distance_field_t& distance_field)
+static void _update_min_distance_field(const _context_t& context, const uvec3_t& start_position, const uvec3_t& extent)
 {
     MELT_PROFILE_BEGIN();
     MELT_ASSERT(start_position.x - 1 != ~0U);
@@ -1125,7 +1105,7 @@ static void _update_min_distance_field(const _context_t& context, const uvec3_t&
                 const u32 index = _flatten_3d(_uvec3_init(x, y, z), context.dimension);
                 if (_inner_voxel(context.voxel_field[index]))
                 {
-                    _min_distance_t& min_distance = distance_field[index];
+                    _min_distance_t& min_distance = context.min_distance_field[index];
                     const u32 updated_distance_x = start_position.x - min_distance.x;
                     min_distance.dist.x = _u32_min(updated_distance_x, min_distance.dist.x);
                 }
@@ -1141,7 +1121,7 @@ static void _update_min_distance_field(const _context_t& context, const uvec3_t&
                 const u32 index = _flatten_3d(_uvec3_init(x, y, z), context.dimension);
                 if (_inner_voxel(context.voxel_field[index]))
                 {
-                    _min_distance_t& min_distance = distance_field[index];
+                    _min_distance_t& min_distance = context.min_distance_field[index];
                     const u32 updated_distance_y = start_position.y - min_distance.y;
                     min_distance.dist.y = _u32_min(updated_distance_y, min_distance.dist.y);
                 }
@@ -1157,7 +1137,7 @@ static void _update_min_distance_field(const _context_t& context, const uvec3_t&
                 const u32 index = _flatten_3d(_uvec3_init(x, y, z), context.dimension);
                 if (_inner_voxel(context.voxel_field[index]))
                 {
-                    _min_distance_t& min_distance = distance_field[index];
+                    _min_distance_t& min_distance = context.min_distance_field[index];
                     const u32 updated_distance_z = start_position.z - min_distance.z;
                     min_distance.dist.z = _u32_min(updated_distance_z, min_distance.dist.z);
                 }
@@ -1273,7 +1253,7 @@ static void _add_voxel_set_to_mesh(const _voxel_set_t& voxel_set, const vec3_t& 
 }
 #endif
 
-static _max_extent_t _get_max_extent(const _context_t& context, const _min_distance_field_t& distance_field)
+static _max_extent_t _get_max_extent(const _context_t& context)
 {
     MELT_PROFILE_BEGIN();
 
@@ -1282,12 +1262,13 @@ static _max_extent_t _get_max_extent(const _context_t& context, const _min_dista
     max_extent.position = _uvec3_init(0, 0, 0);
     max_extent.volume = 0;
 
-    for (auto& min_distance : distance_field)
+    for (u32 i = 0; i < context.size; ++i)
     {
+        const _min_distance_t& min_distance = context.min_distance_field[i];
         _voxel_status_t voxel_status = context.voxel_field[_flatten_3d(min_distance.position, context.dimension)];
         if (_inner_voxel(voxel_status))
         {
-            uvec3_t extent = _get_max_aabb_extent(context, distance_field, min_distance);
+            uvec3_t extent = _get_max_aabb_extent(context, min_distance);
             u32 volume = extent.x * extent.y * extent.z;
             if (volume > max_extent.volume)
             {
@@ -1327,8 +1308,9 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
     memset(&context, 0, sizeof(_context_t));
     context.dimension = _uvec3_init(voxel_count);
     context.size = u32(voxel_count.x) * u32(voxel_count.y) * u32(voxel_count.z);
-    context.voxel_field = MELT_ALLOC(_voxel_status_t, context.size);
-    context.voxel_indices = MELT_ALLOC(s32, context.size);
+    context.voxel_field = MELT_MALLOC(_voxel_status_t, context.size);
+    context.min_distance_field = MELT_MALLOC(_min_distance_t, context.size);
+    context.voxel_indices = MELT_MALLOC(s32, context.size);
     for (u32 i = 0; i < context.size; ++i)
         context.voxel_indices[i] = -1;
 
@@ -1404,31 +1386,29 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
     // each of the directions +x,-x,+y,-y,+z,-z, and whether the voxel is an 'inner'
     // voxel (contained within the shell voxels).
 
-    _min_distance_field_t min_distance_field(context.size);
-
     // Generate the minimum distance field, and voxel status from the initial shell.
 
-    _generate_fields(context, voxel_set_planes, min_distance_field);
+    _generate_fields(context, voxel_set_planes);
 
-    if (!_water_tight_mesh(context, min_distance_field))
+    if (!_water_tight_mesh(context))
     {
         return 0;
     }
 
-    _debug_validate_min_distance_field(context, outer_voxels, min_distance_field);
+    _debug_validate_min_distance_field(context, outer_voxels);
 
     std::vector<_max_extent_t> max_extents;
     if (params.debug.extent_max_step != 0)
     {
         for (s32 i = 0; i < params.debug.extent_max_step; ++i)
         {
-            _max_extent_t max_extent = _get_max_extent(context, min_distance_field);
+            _max_extent_t max_extent = _get_max_extent(context);
 
             _clip_voxel_field(context, max_extent.position, max_extent.extent);
 
-            _update_min_distance_field(context, max_extent.position, max_extent.extent, min_distance_field);
+            _update_min_distance_field(context, max_extent.position, max_extent.extent);
 
-            _debug_validate_min_distance_field(context, outer_voxels, min_distance_field);
+            _debug_validate_min_distance_field(context, outer_voxels);
 
             max_extents.push_back(max_extent);
         }
@@ -1440,8 +1420,9 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
         f32 fill_pct = 0.0f;
 
         // Approximate the volume of the mesh by the number of voxels that can fit within.
-        for (auto& min_distance : min_distance_field)
+        for (u32 i = 0; i < context.size; ++i)
         {
+            const _min_distance_t& min_distance = context.min_distance_field[i];
             _voxel_status_t voxel_status = context.voxel_field[_flatten_3d(min_distance.position, context.dimension)];
 
             // Each inner voxel adds one unit to the volume.
@@ -1458,13 +1439,13 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
         //    on each of the axes +x, +y, +z
         while (fill_pct < params.fill_pct && volume != total_volume)
         {
-            _max_extent_t max_extent = _get_max_extent(context, min_distance_field);
+            _max_extent_t max_extent = _get_max_extent(context);
 
             _clip_voxel_field(context, max_extent.position, max_extent.extent);
 
-            _update_min_distance_field(context, max_extent.position, max_extent.extent, min_distance_field);
+            _update_min_distance_field(context, max_extent.position, max_extent.extent);
 
-            _debug_validate_min_distance_field(context, outer_voxels, min_distance_field);
+            _debug_validate_min_distance_field(context, outer_voxels);
 
             max_extents.push_back(max_extent);
 
@@ -1521,8 +1502,9 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
         }
         if (params.debug.flags & MELT_DEBUG_TYPE_SHOW_INNER)
         {
-            for (const auto& min_distance : min_distance_field)
+            for (u32 i = 0; i < context.size; ++i)
             {
+                const _min_distance_t& min_distance = context.min_distance_field[i];
                 const u32 index = _flatten_3d(min_distance.position, context.dimension);
                 if (!context.voxel_field[index].inner)
                     continue;
@@ -1539,8 +1521,9 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
         }
         if (params.debug.flags & MELT_DEBUG_TYPE_SHOW_MIN_DISTANCE)
         {
-            for (const auto& min_distance : min_distance_field)
+            for (u32 i = 0; i < context.size; ++i)
             {
+                const _min_distance_t& min_distance = context.min_distance_field[i];
                 vec3_t voxel_center = _vec3_add(mesh_aabb.min, _vec3_mul(_vec3_init(min_distance.position), voxel_extent));
                 if (u32(params.debug.voxel_x) == min_distance.x &&
                     u32(params.debug.voxel_y) == min_distance.y &&
@@ -1568,9 +1551,10 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
         }
         if (params.debug.flags & MELT_DEBUG_TYPE_SHOW_EXTENT)
         {
-            for (const auto& min_distance : min_distance_field)
+            for (u32 i = 0; i < context.size; ++i)
             {
-                uvec3_t max_extent = _get_max_aabb_extent(context, min_distance_field, min_distance);
+                const _min_distance_t& min_distance = context.min_distance_field[i];
+                uvec3_t max_extent = _get_max_aabb_extent(context, min_distance);
                 for (u32 x = min_distance.x; x < min_distance.x + max_extent.x; ++x)
                 {
                     for (u32 y = min_distance.y; y < min_distance.y + max_extent.y; ++y)
@@ -1605,7 +1589,12 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
 
     MELT_FREE(context.voxel_indices);
     MELT_FREE(context.voxel_field);
+    MELT_FREE(context.min_distance_field);
     return 1;
 }
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 #endif // MELT_IMPLEMENTATION
