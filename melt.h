@@ -158,7 +158,6 @@ struct Plane
 
 struct _min_distance_t
 {
-    _min_distance_t() {}
     svec3_t dist;
     union
     {
@@ -198,11 +197,11 @@ typedef struct
     u32 volume;
 } max_extent_t;
 
-using _voxel_indices_t = std::vector<s32>;
-using _voxel_set_t = std::vector<Voxel>;
-using _min_distance_field_t = std::vector<_min_distance_t>;
-using _voxel_field_t =  std::vector<voxel_status_t>;
-using _max_extent_t =  std::vector<max_extent_t>;
+typedef std::vector<s32> _voxel_indices_t;
+typedef std::vector<Voxel> _voxel_set_t;
+typedef std::vector<_min_distance_t> _min_distance_field_t;
+typedef std::vector<voxel_status_t> _voxel_field_t;
+typedef std::vector<max_extent_t> _max_extent_t;
 
 typedef struct
 {
