@@ -106,7 +106,7 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& result);
 #endif
 #ifndef MELT_MALLOC
 #include <stdlib.h>
-#define MELT_MALLOC(T, N) ((T*)malloc(N * sizeof(T)))
+#define MELT_MALLOC(T, N) (T*)malloc(N * sizeof(T))
 #define MELT_FREE(T) free(T)
 #endif
 
@@ -118,7 +118,15 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& result);
 #pragma warning(push)
 #pragma warning(disable:4244) // 'unsigned int' to 'float', possible loss of data
 #pragma warning(disable:4201) // nonstandard extension used: nameless struct/union
-#endif
+#endif // _MSC_VER
+
+#ifndef _MSC_VER
+#define MELT_ALLOCA(T, N) (T*)alloca(N * sizeof(T))
+#else
+#include <malloc.h>
+#pragma warning(disable:6255)
+#define MELT_ALLOCA(T, N) (T*)_alloca(N * sizeof(T))
+#endif // !_MSC_VER
 
 #include <math.h>  // fabsf
 #include <float.h> // FLT_MAX
@@ -767,29 +775,43 @@ static _aabb_t _generate_aabb(const melt_mesh_t& mesh)
     return aabb;
 }
 
+static void _free_per_plane_voxel_set(_context_t& context)
+{
+    for (u32 i = 0; i < context.voxel_set_planes.x_count; ++i)
+        MELT_FREE(context.voxel_set_planes.x[i].voxels);
+    for (u32 i = 0; i < context.voxel_set_planes.y_count; ++i)
+        MELT_FREE(context.voxel_set_planes.y[i].voxels);
+    for (u32 i = 0; i < context.voxel_set_planes.z_count; ++i)
+        MELT_FREE(context.voxel_set_planes.z[i].voxels);
+
+    MELT_FREE(context.voxel_set_planes.x);
+    MELT_FREE(context.voxel_set_planes.y);
+    MELT_FREE(context.voxel_set_planes.z);
+}
+
 static void _generate_per_plane_voxel_set(_context_t& context)
 {
     MELT_PROFILE_BEGIN();
-    
-    context.voxel_set_planes.x = MELT_MALLOC(_voxel_set_plane_t, context.dimension.y * context.dimension.z);
-    context.voxel_set_planes.y = MELT_MALLOC(_voxel_set_plane_t, context.dimension.x * context.dimension.z);
-    context.voxel_set_planes.z = MELT_MALLOC(_voxel_set_plane_t, context.dimension.x * context.dimension.y);
-    
+   
     context.voxel_set_planes.x_count = context.dimension.y * context.dimension.z;
     context.voxel_set_planes.y_count = context.dimension.x * context.dimension.z;
     context.voxel_set_planes.z_count = context.dimension.x * context.dimension.y;
+
+    context.voxel_set_planes.x = MELT_MALLOC(_voxel_set_plane_t, context.voxel_set_planes.x_count);
+    context.voxel_set_planes.y = MELT_MALLOC(_voxel_set_plane_t, context.voxel_set_planes.y_count);
+    context.voxel_set_planes.z = MELT_MALLOC(_voxel_set_plane_t, context.voxel_set_planes.z_count);
     
-    for (u32 i = 0; i < context.dimension.y * context.dimension.z; ++i)
+    for (u32 i = 0; i < context.voxel_set_planes.x_count; ++i)
     {
         context.voxel_set_planes.x[i].voxels = MELT_MALLOC(_voxel_t, context.voxel_set_count);
         context.voxel_set_planes.x[i].voxel_count = 0;
     }
-    for (u32 i = 0; i < context.dimension.x * context.dimension.z; ++i)
+    for (u32 i = 0; i < context.voxel_set_planes.y_count; ++i)
     {
         context.voxel_set_planes.y[i].voxels = MELT_MALLOC(_voxel_t, context.voxel_set_count);
         context.voxel_set_planes.y[i].voxel_count = 0;
     }
-    for (u32 i = 0; i < context.dimension.x * context.dimension.y; ++i)
+    for (u32 i = 0; i < context.voxel_set_planes.z_count; ++i)
     {
         context.voxel_set_planes.z[i].voxels = MELT_MALLOC(_voxel_t, context.voxel_set_count);
         context.voxel_set_planes.z[i].voxel_count = 0;
@@ -927,7 +949,8 @@ static uvec3_t _get_max_aabb_extent(const _context_t& context, const _min_distan
 {
     MELT_PROFILE_BEGIN();
 
-    std::vector<uvec2_t> max_aabb_extents;
+    uvec2_t* max_aabb_extents = MELT_ALLOCA(uvec2_t, min_distance.z + min_distance.dist.z);
+    u32 max_aabb_extents_count = 0;
 
     for (u32 z = min_distance.z; z < min_distance.z + min_distance.dist.z; ++z)
     {
@@ -967,7 +990,7 @@ static uvec3_t _get_max_aabb_extent(const _context_t& context, const _min_distan
             ++i;
         }
 
-        max_aabb_extents.push_back(max_extent);
+        max_aabb_extents[max_aabb_extents_count++] = max_extent;
     }
 
     uvec2_t min_extent = uvec2_new(UINT_MAX, UINT_MAX);
@@ -975,10 +998,11 @@ static uvec3_t _get_max_aabb_extent(const _context_t& context, const _min_distan
     u32 z_slice = 1;
     u32 max_volume = 0;
 
-    MELT_ASSERT(max_aabb_extents.size() > 0);
+    MELT_ASSERT(max_aabb_extents_count > 0);
 
-    for (const uvec2_t& extent : max_aabb_extents)
+    for (u32 i = 0; i < max_aabb_extents_count; ++i)
     {
+        const uvec2_t& extent = max_aabb_extents[i];
         min_extent.x = _u32_min(extent.x, min_extent.x);
         min_extent.y = _u32_min(extent.y, min_extent.y);
 
@@ -1512,8 +1536,7 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
 
     _debug_validate_max_extents(context, max_extents);
 
-// #if defined(MELT_DEBUG)
-#if 0
+#if defined(MELT_DEBUG)
     MELT_ASSERT(params.debug._start_canary == 0 && params.debug._end_canary == 0 && "Make sure to memset melt_debug_params_t to 0 before use");
 
     if (params.debug.flags > 0)
@@ -1529,20 +1552,20 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
             if (params.debug.voxel_y > 0 && params.debug.voxel_z > 0)
             {
                 u32 index = _flatten_2d(uvec2_new(params.debug.voxel_y, params.debug.voxel_z), uvec2_new(context.dimension.y, context.dimension.z));
-                _voxel_set_t& voxels_x_planes = voxel_set_planes.x[index];
-                _add_voxel_set_to_mesh(voxels_x_planes.data(), voxels_x_planes.size(), _vec3_mul(half_voxel_extent, params.debug.voxelScale), out_result.debug_mesh);
+                _voxel_set_plane_t& voxels_x = context.voxel_set_planes.x[index];
+                _add_voxel_set_to_mesh(voxels_x.voxels, voxels_x.voxel_count, _vec3_mul(half_voxel_extent, params.debug.voxelScale), out_result.debug_mesh);
             }
             if (params.debug.voxel_x > 0 && params.debug.voxel_z > 0)
             {
                 u32 index = _flatten_2d(uvec2_new(params.debug.voxel_x, params.debug.voxel_z), uvec2_new(context.dimension.x, context.dimension.z));
-                _voxel_set_t& voxels_y_planes = voxel_set_planes.y[index];
-                _add_voxel_set_to_mesh(voxels_y_planes.data(), voxels_y_planes.size(), _vec3_mul(half_voxel_extent, params.debug.voxelScale), out_result.debug_mesh);
+                _voxel_set_plane_t& voxels_y = context.voxel_set_planes.y[index];
+                _add_voxel_set_to_mesh(voxels_y.voxels, voxels_y.voxel_count, _vec3_mul(half_voxel_extent, params.debug.voxelScale), out_result.debug_mesh);
             }
             if (params.debug.voxel_x > 0 && params.debug.voxel_y > 0)
             {
                 u32 index = _flatten_2d(uvec2_new(params.debug.voxel_x, params.debug.voxel_y), uvec2_new(context.dimension.x, context.dimension.y));
-                _voxel_set_t& voxels_z_planes = voxel_set_planes.z[index];
-                _add_voxel_set_to_mesh(voxels_z_planes.data(), voxels_z_planes.size(), _vec3_mul(half_voxel_extent, params.debug.voxelScale), out_result.debug_mesh);
+                _voxel_set_plane_t& voxels_z = context.voxel_set_planes.z[index];
+                _add_voxel_set_to_mesh(voxels_z.voxels, voxels_z.voxel_count, _vec3_mul(half_voxel_extent, params.debug.voxelScale), out_result.debug_mesh);
             }
         }
         if (params.debug.flags & MELT_DEBUG_TYPE_SHOW_INNER)
@@ -1632,6 +1655,7 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
     }
 #endif
 
+    _free_per_plane_voxel_set(context);
     MELT_FREE(context.voxel_indices);
     MELT_FREE(context.voxel_field);
     MELT_FREE(context.min_distance_field);
