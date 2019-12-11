@@ -230,8 +230,24 @@ typedef struct
     void* data;
 } _array_t;
 
-typedef std::vector<_voxel_t> _voxel_set_t;
 typedef std::vector<_max_extent_t> _max_extents_t;
+
+typedef struct
+{
+    _voxel_t* voxels;
+    u32 voxel_count;
+} _voxel_set_plane_t;
+
+typedef struct
+{
+    _voxel_set_plane_t* x;
+    _voxel_set_plane_t* y;
+    _voxel_set_plane_t* z;
+    
+    u32 x_count;
+    u32 y_count;
+    u32 z_count;
+} _voxel_set_planes_t;
 
 typedef struct
 {
@@ -244,17 +260,12 @@ typedef struct
 
     _voxel_t* voxel_set;
     u32 voxel_set_count;
+    
+    _voxel_set_planes_t voxel_set_planes;
 
     _max_extent_t* max_extents;
     u32 max_extents_count;
 } _context_t;
-
-typedef struct
-{   
-    std::vector<_voxel_set_t> x;
-    std::vector<_voxel_set_t> y;
-    std::vector<_voxel_set_t> z;
-} _voxel_set_planes_t;
 
 static const color_3u8_t _blue_violet       = { 138,  43, 226 };
 static const color_3u8_t _dark_see_green    = { 143, 188, 143 };
@@ -756,13 +767,33 @@ static _aabb_t _generate_aabb(const melt_mesh_t& mesh)
     return aabb;
 }
 
-static void _generate_per_plane_voxel_set(const _context_t& context, _voxel_set_planes_t& out_voxel_set_planes)
+static void _generate_per_plane_voxel_set(_context_t& context)
 {
     MELT_PROFILE_BEGIN();
-
-    out_voxel_set_planes.x.resize(context.dimension.y * context.dimension.z);
-    out_voxel_set_planes.y.resize(context.dimension.x * context.dimension.z);
-    out_voxel_set_planes.z.resize(context.dimension.x * context.dimension.y);
+    
+    context.voxel_set_planes.x = MELT_MALLOC(_voxel_set_plane_t, context.dimension.y * context.dimension.z);
+    context.voxel_set_planes.y = MELT_MALLOC(_voxel_set_plane_t, context.dimension.x * context.dimension.z);
+    context.voxel_set_planes.z = MELT_MALLOC(_voxel_set_plane_t, context.dimension.x * context.dimension.y);
+    
+    context.voxel_set_planes.x_count = context.dimension.y * context.dimension.z;
+    context.voxel_set_planes.y_count = context.dimension.x * context.dimension.z;
+    context.voxel_set_planes.z_count = context.dimension.x * context.dimension.y;
+    
+    for (u32 i = 0; i < context.dimension.y * context.dimension.z; ++i)
+    {
+        context.voxel_set_planes.x[i].voxels = MELT_MALLOC(_voxel_t, context.voxel_set_count);
+        context.voxel_set_planes.x[i].voxel_count = 0;
+    }
+    for (u32 i = 0; i < context.dimension.x * context.dimension.z; ++i)
+    {
+        context.voxel_set_planes.y[i].voxels = MELT_MALLOC(_voxel_t, context.voxel_set_count);
+        context.voxel_set_planes.y[i].voxel_count = 0;
+    }
+    for (u32 i = 0; i < context.dimension.x * context.dimension.y; ++i)
+    {
+        context.voxel_set_planes.z[i].voxels = MELT_MALLOC(_voxel_t, context.voxel_set_count);
+        context.voxel_set_planes.z[i].voxel_count = 0;
+    }
     
     uvec2_t dim_yz = uvec2_new(context.dimension.y, context.dimension.z);
     uvec2_t dim_xz = uvec2_new(context.dimension.x, context.dimension.z);
@@ -782,13 +813,13 @@ static void _generate_per_plane_voxel_set(const _context_t& context, _voxel_set_
                     u32 index_xz = _flatten_2d(uvec2_new(x, z), dim_xz);
                     u32 index_xy = _flatten_2d(uvec2_new(x, y), dim_xy);
 
-                    _voxel_set_t& voxels_x_planes = out_voxel_set_planes.x[index_yz];
-                    _voxel_set_t& voxels_y_planes = out_voxel_set_planes.y[index_xz];
-                    _voxel_set_t& voxels_z_planes = out_voxel_set_planes.z[index_xy];
+                    _voxel_set_plane_t& voxels_x_planes = context.voxel_set_planes.x[index_yz];
+                    _voxel_set_plane_t& voxels_y_planes = context.voxel_set_planes.y[index_xz];
+                    _voxel_set_plane_t& voxels_z_planes = context.voxel_set_planes.z[index_xy];
 
-                    voxels_x_planes.push_back(context.voxel_set[voxel_index]);
-                    voxels_y_planes.push_back(context.voxel_set[voxel_index]);
-                    voxels_z_planes.push_back(context.voxel_set[voxel_index]);
+                    voxels_x_planes.voxels[voxels_x_planes.voxel_count++] = context.voxel_set[voxel_index];
+                    voxels_y_planes.voxels[voxels_y_planes.voxel_count++] = context.voxel_set[voxel_index];
+                    voxels_z_planes.voxels[voxels_z_planes.voxel_count++] = context.voxel_set[voxel_index];
                 }
             }
         }
@@ -797,7 +828,7 @@ static void _generate_per_plane_voxel_set(const _context_t& context, _voxel_set_
     MELT_PROFILE_END();
 }
 
-static void _get_field(_context_t& context, const _voxel_set_planes_t& voxel_set_planes, u32 x, u32 y, u32 z, _min_distance_t& out_min_distance, _voxel_status_t& out_status)
+static void _get_field(_context_t& context, u32 x, u32 y, u32 z, _min_distance_t& out_min_distance, _voxel_status_t& out_status)
 {
     const svec3_t InfiniteDistance = _svec3_init(INT_MAX, INT_MAX, INT_MAX);
     const svec3_t NullDistance = _svec3_init(0, 0, 0);
@@ -813,9 +844,10 @@ static void _get_field(_context_t& context, const _voxel_set_planes_t& voxel_set
 
     uvec2_t dim_yz = uvec2_new(context.dimension.y, context.dimension.z);
     u32 index_yz = _flatten_2d(uvec2_new(y, z), dim_yz);
-    const auto& voxels_x_plane = voxel_set_planes.x[index_yz];
-    for (const auto& voxel : voxels_x_plane)
+    const auto& voxels_x_plane = context.voxel_set_planes.x[index_yz];
+    for (u32 i = 0; i < voxels_x_plane.voxel_count; ++i)
     {
+        const _voxel_t& voxel = voxels_x_plane.voxels[i];
         s32 distance = voxel.position.x - x;
         if (distance > 0)
         {
@@ -829,9 +861,10 @@ static void _get_field(_context_t& context, const _voxel_set_planes_t& voxel_set
     }
     uvec2_t dim_xz = uvec2_new(context.dimension.x, context.dimension.z);
     u32 index_xz = _flatten_2d(uvec2_new(x, z), dim_xz);
-    const auto& voxels_y_plane = voxel_set_planes.y[index_xz];
-    for (const auto& voxel : voxels_y_plane)
+    const auto& voxels_y_plane = context.voxel_set_planes.y[index_xz];
+    for (u32 i = 0; i < voxels_y_plane.voxel_count; ++i)
     {
+        const _voxel_t& voxel = voxels_y_plane.voxels[i];
         s32 distance = voxel.position.y - y;
         if (distance > 0)
         {
@@ -845,9 +878,10 @@ static void _get_field(_context_t& context, const _voxel_set_planes_t& voxel_set
     }
     uvec2_t dim_xy = uvec2_new(context.dimension.x, context.dimension.y);
     u32 index_xy = _flatten_2d(uvec2_new(x, y), dim_xy);
-    const auto& voxels_z_plane = voxel_set_planes.z[index_xy];
-    for (const auto& voxel : voxels_z_plane)
+    const auto& voxels_z_plane = context.voxel_set_planes.z[index_xy];
+    for (u32 i = 0; i < voxels_z_plane.voxel_count; ++i)
     {
+        const _voxel_t& voxel = voxels_z_plane.voxels[i];
         s32 distance = voxel.position.z - z;
         if (distance > 0)
         {
@@ -869,7 +903,7 @@ static void _get_field(_context_t& context, const _voxel_set_planes_t& voxel_set
     }
 }
 
-static void _generate_fields(_context_t& context, const _voxel_set_planes_t& voxel_set_planes)
+static void _generate_fields(_context_t& context)
 {
     MELT_PROFILE_BEGIN();
 
@@ -878,7 +912,7 @@ static void _generate_fields(_context_t& context, const _voxel_set_planes_t& vox
         _min_distance_t& min_distance = context.min_distance_field[i];
         _voxel_status_t& voxel_status = context.voxel_field[i];
         const uvec3_t position = _unflatten_3d(i, context.dimension);
-        _get_field(context, voxel_set_planes, position.x, position.y, position.z, min_distance, voxel_status);
+        _get_field(context, position.x, position.y, position.z, min_distance, voxel_status);
     }
 
     MELT_PROFILE_END();
@@ -1386,7 +1420,7 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
     _voxel_set_planes_t voxel_set_planes;
 
     // Generate a flat voxel list per plane (x,y), (x,z), (y,z)
-    _generate_per_plane_voxel_set(context, voxel_set_planes);
+    _generate_per_plane_voxel_set(context);
 
     // The minimum distance field is a data structure representing, for each voxel,
     // the minimum distance that we can go in each of the positive directions x, y,
@@ -1398,7 +1432,7 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
 
     // Generate the minimum distance field, and voxel status from the initial shell.
 
-    _generate_fields(context, voxel_set_planes);
+    _generate_fields(context);
 
     if (!_water_tight_mesh(context))
     {
@@ -1478,7 +1512,8 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
 
     _debug_validate_max_extents(context, max_extents);
 
-#if defined(MELT_DEBUG)
+// #if defined(MELT_DEBUG)
+#if 0
     MELT_ASSERT(params.debug._start_canary == 0 && params.debug._end_canary == 0 && "Make sure to memset melt_debug_params_t to 0 before use");
 
     if (params.debug.flags > 0)
