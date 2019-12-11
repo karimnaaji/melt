@@ -1353,6 +1353,28 @@ static _max_extent_t _get_max_extent(const _context_t& context)
     return max_extent;
 }
 
+void _init_context(_context_t& context, vec3_t voxel_count)
+{
+    memset(&context, 0, sizeof(_context_t));
+    context.dimension = _uvec3_init(voxel_count);
+    context.size = u32(voxel_count.x) * u32(voxel_count.y) * u32(voxel_count.z);
+    context.voxel_field = MELT_MALLOC(_voxel_status_t, context.size);
+    context.min_distance_field = MELT_MALLOC(_min_distance_t, context.size);
+    context.voxel_indices = MELT_MALLOC(s32, context.size);
+    context.voxel_set = MELT_MALLOC(_voxel_t, context.size);
+    for (u32 i = 0; i < context.size; ++i)
+        context.voxel_indices[i] = -1;
+}
+
+void _free_context(_context_t& context)
+{
+    _free_per_plane_voxel_set(context);
+    MELT_FREE(context.voxel_indices);
+    MELT_FREE(context.voxel_field);
+    MELT_FREE(context.min_distance_field);
+    MELT_FREE(context.voxel_set);
+}
+
 int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_result)
 {
     out_result.debug_mesh.vertices.clear();
@@ -1374,15 +1396,7 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
     vec3_t voxel_resolution = _vec3_mul(voxel_count, inv_mesh_extent);
 
     _context_t context;
-    memset(&context, 0, sizeof(_context_t));
-    context.dimension = _uvec3_init(voxel_count);
-    context.size = u32(voxel_count.x) * u32(voxel_count.y) * u32(voxel_count.z);
-    context.voxel_field = MELT_MALLOC(_voxel_status_t, context.size);
-    context.min_distance_field = MELT_MALLOC(_min_distance_t, context.size);
-    context.voxel_indices = MELT_MALLOC(s32, context.size);
-    context.voxel_set = MELT_MALLOC(_voxel_t, context.size);
-    for (u32 i = 0; i < context.size; ++i)
-        context.voxel_indices[i] = -1;
+    _init_context(context, voxel_count);
 
     // Perform shell voxelization
     for (u32 i = 0; i < params.mesh.indices.size(); i += 3)
@@ -1460,6 +1474,7 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
 
     if (!_water_tight_mesh(context))
     {
+        _free_context(context);
         return 0;
     }
 
@@ -1655,11 +1670,7 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
     }
 #endif
 
-    _free_per_plane_voxel_set(context);
-    MELT_FREE(context.voxel_indices);
-    MELT_FREE(context.voxel_field);
-    MELT_FREE(context.min_distance_field);
-    MELT_FREE(context.voxel_set);
+    _free_context(context);
     return 1;
 }
 
