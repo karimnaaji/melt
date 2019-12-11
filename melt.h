@@ -73,7 +73,6 @@ typedef struct
     int32_t voxel_y;
     int32_t voxel_z;
     int32_t extent_index;
-    int32_t extent_max_step;
     float voxelScale;
     uint32_t _end_canary;
 } melt_debug_params_t;
@@ -237,8 +236,6 @@ typedef struct
     u32 element_byte_size;
     void* data;
 } _array_t;
-
-typedef std::vector<_max_extent_t> _max_extents_t;
 
 typedef struct
 {
@@ -1134,12 +1131,12 @@ static void _debug_validate_min_distance_field(const _context_t& context)
 #endif
 }
 
-static void _debug_validate_max_extents(const _context_t& context, const _max_extents_t& max_extents)
+static void _debug_validate_max_extents(const _context_t& context, const _max_extent_t* max_extents, u32 max_extent_count)
 {
 #if defined(MELT_DEBUG) && defined(MELT_ASSERT)
-    for (u32 i = 0; i < max_extents.size(); ++i)
+    for (u32 i = 0; i < max_extent_count; ++i)
     {
-        const auto& extent = max_extents[i];
+        const _max_extent_t& extent = max_extents[i];
         for (u32 x = extent.position.x; x < extent.position.x + extent.extent.x; ++x)
         {
             for (u32 y = extent.position.y; y < extent.position.y + extent.extent.y; ++y)
@@ -1480,64 +1477,48 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
 
     _debug_validate_min_distance_field(context);
 
-    std::vector<_max_extent_t> max_extents;
-    if (params.debug.extent_max_step != 0)
+    u32 volume = 0;
+    u32 total_volume = 0;
+    f32 fill_pct = 0.0f;
+
+    // Approximate the volume of the mesh by the number of voxels that can fit within.
+    for (u32 i = 0; i < context.size; ++i)
     {
-        for (s32 i = 0; i < params.debug.extent_max_step; ++i)
-        {
-            _max_extent_t max_extent = _get_max_extent(context);
+        const _min_distance_t& min_distance = context.min_distance_field[i];
+        _voxel_status_t voxel_status = context.voxel_field[_flatten_3d(min_distance.position, context.dimension)];
 
-            _clip_voxel_field(context, max_extent.position, max_extent.extent);
-
-            _update_min_distance_field(context, max_extent.position, max_extent.extent);
-
-            _debug_validate_min_distance_field(context);
-
-            max_extents.push_back(max_extent);
-        }
-    }
-    else
-    {
-        u32 volume = 0;
-        u32 total_volume = 0;
-        f32 fill_pct = 0.0f;
-
-        // Approximate the volume of the mesh by the number of voxels that can fit within.
-        for (u32 i = 0; i < context.size; ++i)
-        {
-            const _min_distance_t& min_distance = context.min_distance_field[i];
-            _voxel_status_t voxel_status = context.voxel_field[_flatten_3d(min_distance.position, context.dimension)];
-
-            // Each inner voxel adds one unit to the volume.
-            if (_inner_voxel(voxel_status))
-                ++total_volume;
-        }
-
-        // One iteration to find an extent does the following:
-        // . Get the extent that maximizes the volume considering the minimum distance
-        //    field
-        // . Clip the max extent found to the set of inner voxels
-        // . Update the minimum distance field by adjusting the distances on the set
-        //    of inner voxels. This is done by extending the extent cube to infinity
-        //    on each of the axes +x, +y, +z
-        while (fill_pct < params.fill_pct && volume != total_volume)
-        {
-            _max_extent_t max_extent = _get_max_extent(context);
-
-            _clip_voxel_field(context, max_extent.position, max_extent.extent);
-
-            _update_min_distance_field(context, max_extent.position, max_extent.extent);
-
-            _debug_validate_min_distance_field(context);
-
-            max_extents.push_back(max_extent);
-
-            fill_pct += f32(max_extent.volume) / total_volume;
-            volume += max_extent.volume;
-        }
+        // Each inner voxel adds one unit to the volume.
+        if (_inner_voxel(voxel_status))
+            ++total_volume;
     }
 
-    for (u32 i = 0; i < max_extents.size(); ++i)
+    _max_extent_t* max_extents = MELT_MALLOC(_max_extent_t, total_volume);
+    u32 max_extent_count = 0;
+
+    // One iteration to find an extent does the following:
+    // . Get the extent that maximizes the volume considering the minimum distance
+    //    field
+    // . Clip the max extent found to the set of inner voxels
+    // . Update the minimum distance field by adjusting the distances on the set
+    //    of inner voxels. This is done by extending the extent cube to infinity
+    //    on each of the axes +x, +y, +z
+    while (fill_pct < params.fill_pct && volume != total_volume)
+    {
+        _max_extent_t max_extent = _get_max_extent(context);
+
+        _clip_voxel_field(context, max_extent.position, max_extent.extent);
+
+        _update_min_distance_field(context, max_extent.position, max_extent.extent);
+
+        _debug_validate_min_distance_field(context);
+
+        max_extents[max_extent_count++] = max_extent;
+
+        fill_pct += f32(max_extent.volume) / total_volume;
+        volume += max_extent.volume;
+    }
+
+    for (u32 i = 0; i < max_extent_count; ++i)
     {
         const _max_extent_t& extent = max_extents[i];
 
@@ -1549,7 +1530,7 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
         _add_voxel_to_mesh(_vec3_add(aabb_center, half_voxel_extent), half_extent, out_result.mesh, params.box_type_flags);
     }
 
-    _debug_validate_max_extents(context, max_extents);
+    _debug_validate_max_extents(context, max_extents, max_extent_count);
 
 #if defined(MELT_DEBUG)
     MELT_ASSERT(params.debug._start_canary == 0 && params.debug._end_canary == 0 && "Make sure to memset melt_debug_params_t to 0 before use");
@@ -1653,7 +1634,7 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
         }
         if (params.debug.flags & MELT_DEBUG_TYPE_SHOW_RESULT)
         {
-            for (size_t i = 0; i < max_extents.size(); ++i)
+            for (size_t i = 0; i < max_extent_count; ++i)
             {
                 const _max_extent_t& extent = max_extents[i];
                 if (s32(i) == params.debug.extent_index || params.debug.extent_index < 0)
@@ -1671,6 +1652,7 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
 #endif
 
     _free_context(context);
+    MELT_FREE(max_extents);
     return 1;
 }
 
