@@ -37,7 +37,7 @@ typedef struct
 typedef struct
 {
     melt_vec3_t* vertices;
-    uint32_t* indices;
+    uint16_t* indices;
     uint32_t vertex_count;
     uint32_t index_count;
 }  melt_mesh_t;
@@ -254,7 +254,7 @@ typedef struct
     _voxel_set_plane_t* x;
     _voxel_set_plane_t* y;
     _voxel_set_plane_t* z;
-    
+
     u32 x_count;
     u32 y_count;
     u32 z_count;
@@ -265,44 +265,45 @@ typedef struct
     uvec3_t dimension;
     u32 size;
 
-    s32* voxel_indices;    
+    s32* voxel_indices;
     _voxel_status_t* voxel_field;
     _min_distance_t* min_distance_field;
 
     _voxel_t* voxel_set;
     u32 voxel_set_count;
-    
+
     _voxel_set_planes_t voxel_set_planes;
 
     _max_extent_t* max_extents;
     u32 max_extents_count;
 } _context_t;
 
-static const color_3u8_t _blue_violet       = { 138,  43, 226 };
-static const color_3u8_t _dark_see_green    = { 143, 188, 143 };
-static const color_3u8_t _light_slated_gray = { 119, 136, 153 };
-static const color_3u8_t _powder_blue       = { 176, 224, 230 };
-static const color_3u8_t _spring_green      = {   0, 255, 127 };
-static const color_3u8_t _steel_blue        = {  70, 130, 180 };
-static const color_3u8_t _teal              = {   0, 128, 128 };
-static const color_3u8_t _whitesmoke        = { 245, 245, 245 };
-static const color_3u8_t _floral_white      = { 255, 250, 240 };
-static const color_3u8_t _light_pink        = { 255, 182, 193 };
+static const color_3u8_t _color_null              = {   0,   0,   0 };
+static const color_3u8_t _color_blue_violet       = { 138,  43, 226 };
+static const color_3u8_t _color_dark_see_green    = { 143, 188, 143 };
+static const color_3u8_t _color_light_slated_gray = { 119, 136, 153 };
+static const color_3u8_t _color_powder_blue       = { 176, 224, 230 };
+static const color_3u8_t _color_spring_green      = {   0, 255, 127 };
+static const color_3u8_t _color_steel_blue        = {  70, 130, 180 };
+static const color_3u8_t _color_teal              = {   0, 128, 128 };
+static const color_3u8_t _color_whitesmoke        = { 245, 245, 245 };
+static const color_3u8_t _color_floral_white      = { 255, 250, 240 };
+static const color_3u8_t _color_light_pink        = { 255, 182, 193 };
 
 static const color_3u8_t _colors[] =
 {
-    _whitesmoke,
-    _steel_blue,
-    _spring_green,
-    _teal,
-    _light_pink,
-    _powder_blue,
-    _light_slated_gray,
-    _dark_see_green,
-    _floral_white,
+    _color_whitesmoke,
+    _color_steel_blue,
+    _color_spring_green,
+    _color_teal,
+    _color_light_pink,
+    _color_powder_blue,
+    _color_light_slated_gray,
+    _color_dark_see_green,
+    _color_floral_white,
 };
 
-static const u32 _voxel_cube_indices[36] =
+static const u16 _voxel_cube_indices[36] =
 {
     0, 1, 2,
     0, 2, 3,
@@ -318,7 +319,7 @@ static const u32 _voxel_cube_indices[36] =
     1, 6, 2,
 };
 
-static const u32 _voxel_cube_indices_sides[24] =
+static const u16 _voxel_cube_indices_sides[24] =
 {
     0, 1, 2,
     0, 2, 3,
@@ -330,7 +331,7 @@ static const u32 _voxel_cube_indices_sides[24] =
     0, 5, 1,
 };
 
-static const u32 _voxel_cube_indices_diagonals[12] =
+static const u16 _voxel_cube_indices_diagonals[12] =
 {
     0, 1, 6,
     0, 6, 7,
@@ -338,13 +339,13 @@ static const u32 _voxel_cube_indices_diagonals[12] =
     4, 2, 3,
 };
 
-static const u32 _voxel_cube_indices_bottom[6] =
+static const u16 _voxel_cube_indices_bottom[6] =
 {
     1, 5, 6,
     1, 6, 2,
 };
 
-static const u32 _voxel_cube_indices_top[6] =
+static const u16 _voxel_cube_indices_top[6] =
 {
     0, 7, 4,
     0, 3, 7,
@@ -372,12 +373,12 @@ static vec3_t _vec3_init(float x, float y, float z)
 }
 
 static uvec3_t _uvec3_init(vec3_t v)
-{ 
+{
     uvec3_t out;
     out.x = (u32)v.x;
     out.y = (u32)v.y;
     out.z = (u32)v.z;
-    return out; 
+    return out;
 }
 
 static vec3_t _vec3_init(uvec3_t v)
@@ -394,7 +395,7 @@ static vec3_t _vec3_mul(vec3_t v, float factor)
     return _vec3_init(v.x * factor, v.y * factor, v.z * factor);
 }
 
-static vec3_t _vec3_mul(vec3_t a, vec3_t b) 
+static vec3_t _vec3_mul(vec3_t a, vec3_t b)
 {
     return _vec3_init(a.x * b.x, a.y * b.y, a.z * b.z);
 }
@@ -465,7 +466,7 @@ static int _svec3_equals(svec3_t a, svec3_t b)
 
 static int _uvec3_equals(uvec3_t a, uvec3_t b)
 {
-    return a.x == b.x && a.y == b.y && a.z == b.z;   
+    return a.x == b.x && a.y == b.y && a.z == b.z;
 }
 
 static float _float_min(float a, float b) {
@@ -694,7 +695,7 @@ static inline u32 _flatten_3d(const uvec3_t index, const uvec3_t dimension)
     MELT_ASSERT(out_index < dimension.x * dimension.y * dimension.z);
     return out_index;
 }
-    
+
 static inline u32 _flatten_2d(const uvec2_t index, const uvec2_t dimension)
 {
     u32 out_index = index.x + dimension.x * index.y;
@@ -795,7 +796,7 @@ static void _free_per_plane_voxel_set(_context_t& context)
 static void _generate_per_plane_voxel_set(_context_t& context)
 {
     MELT_PROFILE_BEGIN();
-   
+
     context.voxel_set_planes.x_count = context.dimension.y * context.dimension.z;
     context.voxel_set_planes.y_count = context.dimension.x * context.dimension.z;
     context.voxel_set_planes.z_count = context.dimension.x * context.dimension.y;
@@ -803,23 +804,23 @@ static void _generate_per_plane_voxel_set(_context_t& context)
     context.voxel_set_planes.x = MELT_MALLOC(_voxel_set_plane_t, context.voxel_set_planes.x_count);
     context.voxel_set_planes.y = MELT_MALLOC(_voxel_set_plane_t, context.voxel_set_planes.y_count);
     context.voxel_set_planes.z = MELT_MALLOC(_voxel_set_plane_t, context.voxel_set_planes.z_count);
-    
+
     for (u32 i = 0; i < context.voxel_set_planes.x_count; ++i)
     {
-        context.voxel_set_planes.x[i].voxels = MELT_MALLOC(_voxel_t, context.voxel_set_count);
+        context.voxel_set_planes.x[i].voxels = MELT_MALLOC(_voxel_t, context.dimension.x);
         context.voxel_set_planes.x[i].voxel_count = 0;
     }
     for (u32 i = 0; i < context.voxel_set_planes.y_count; ++i)
     {
-        context.voxel_set_planes.y[i].voxels = MELT_MALLOC(_voxel_t, context.voxel_set_count);
+        context.voxel_set_planes.y[i].voxels = MELT_MALLOC(_voxel_t, context.dimension.y);
         context.voxel_set_planes.y[i].voxel_count = 0;
     }
     for (u32 i = 0; i < context.voxel_set_planes.z_count; ++i)
     {
-        context.voxel_set_planes.z[i].voxels = MELT_MALLOC(_voxel_t, context.voxel_set_count);
+        context.voxel_set_planes.z[i].voxels = MELT_MALLOC(_voxel_t, context.dimension.z);
         context.voxel_set_planes.z[i].voxel_count = 0;
     }
-    
+
     uvec2_t dim_yz = uvec2_new(context.dimension.y, context.dimension.z);
     uvec2_t dim_xz = uvec2_new(context.dimension.x, context.dimension.z);
     uvec2_t dim_xy = uvec2_new(context.dimension.x, context.dimension.y);
@@ -1044,7 +1045,7 @@ static void _clip_voxel_field(const _context_t& context, const uvec3_t start_pos
 
     MELT_PROFILE_END();
 }
-    
+
 static bool _water_tight_mesh(const _context_t& context)
 {
     for (u32 i = 0; i < context.size; ++i)
@@ -1052,7 +1053,7 @@ static bool _water_tight_mesh(const _context_t& context)
         const _min_distance_t& min_distance = context.min_distance_field[i];
         if (!_inner_voxel(context.voxel_field[_flatten_3d(min_distance.position, context.dimension)]))
             continue;
-        
+
         for (u32 x = min_distance.x; x < min_distance.x + min_distance.dist.x; ++x)
         {
             const u32 y = min_distance.y;
@@ -1084,7 +1085,7 @@ static bool _water_tight_mesh(const _context_t& context)
             }
         }
     }
-    
+
     return true;
 }
 
@@ -1220,37 +1221,37 @@ static void _update_min_distance_field(const _context_t& context, const uvec3_t&
     MELT_PROFILE_END();
 }
 
-static melt_occluder_box_type_t _select_voxel_indices(melt_occluder_box_type_flags_t box_type_flags, const u32*& out_indices, u32& out_index_length)
+static melt_occluder_box_type_t _select_voxel_indices(melt_occluder_box_type_flags_t box_type_flags, const u16*& out_indices, u32& out_index_length)
 {
 #define CHECK_FLAG(flag) (box_type_flags & flag) == flag
 
     if (CHECK_FLAG(MELT_OCCLUDER_BOX_TYPE_REGULAR))
     {
-        out_indices = static_cast<const u32*>(_voxel_cube_indices);
+        out_indices = static_cast<const u16*>(_voxel_cube_indices);
         out_index_length = MELT_ARRAY_LENGTH(_voxel_cube_indices);
         return MELT_OCCLUDER_BOX_TYPE_REGULAR;
     }
     else if (CHECK_FLAG(MELT_OCCLUDER_BOX_TYPE_SIDES))
     {
-        out_indices = static_cast<const u32*>(_voxel_cube_indices_sides);
+        out_indices = static_cast<const u16*>(_voxel_cube_indices_sides);
         out_index_length = MELT_ARRAY_LENGTH(_voxel_cube_indices_sides);
         return MELT_OCCLUDER_BOX_TYPE_SIDES;
     }
     else if (CHECK_FLAG(MELT_OCCLUDER_BOX_TYPE_BOTTOM))
     {
-        out_indices = static_cast<const u32*>(_voxel_cube_indices_bottom);
+        out_indices = static_cast<const u16*>(_voxel_cube_indices_bottom);
         out_index_length = MELT_ARRAY_LENGTH(_voxel_cube_indices_bottom);
         return MELT_OCCLUDER_BOX_TYPE_BOTTOM;
     }
     else if (CHECK_FLAG(MELT_OCCLUDER_BOX_TYPE_TOP))
     {
-        out_indices = static_cast<const u32*>(_voxel_cube_indices_top);
+        out_indices = static_cast<const u16*>(_voxel_cube_indices_top);
         out_index_length = MELT_ARRAY_LENGTH(_voxel_cube_indices_top);
         return MELT_OCCLUDER_BOX_TYPE_TOP;
     }
     else if (CHECK_FLAG(MELT_OCCLUDER_BOX_TYPE_DIAGONALS))
     {
-        out_indices = static_cast<const u32*>(_voxel_cube_indices_diagonals);
+        out_indices = static_cast<const u16*>(_voxel_cube_indices_diagonals);
         out_index_length = MELT_ARRAY_LENGTH(_voxel_cube_indices_diagonals);
         return MELT_OCCLUDER_BOX_TYPE_DIAGONALS;
     }
@@ -1260,12 +1261,12 @@ static melt_occluder_box_type_t _select_voxel_indices(melt_occluder_box_type_fla
     return MELT_OCCLUDER_BOX_TYPE_NONE;
 }
 
-static u32 _index_count_per_aabb(melt_occluder_box_type_flags_t box_type_flags)
+static u16 _index_count_per_aabb(melt_occluder_box_type_flags_t box_type_flags)
 {
-    u32 index_count = 0;
+    u16 index_count = 0;
     while (box_type_flags != MELT_OCCLUDER_BOX_TYPE_NONE)
     {
-        const u32* indices = nullptr;
+        const u16* indices = nullptr;
         u32 indices_length = 0;
         melt_occluder_box_type_t selected_type = _select_voxel_indices(box_type_flags, indices, indices_length);
         MELT_ASSERT(indices && indices_length > 0);
@@ -1280,19 +1281,21 @@ static u32 _vertex_count_per_aabb()
     return MELT_ARRAY_LENGTH(_voxel_cube_vertices);
 }
 
-static void _add_voxel_to_mesh(vec3_t voxel_center, vec3_t half_voxel_size, melt_mesh_t& mesh, melt_occluder_box_type_flags_t box_type_flags)
+static void _add_voxel_to_mesh(vec3_t voxel_center, vec3_t half_voxel_size, melt_mesh_t& mesh, melt_occluder_box_type_flags_t box_type_flags = MELT_OCCLUDER_BOX_TYPE_REGULAR, const color_3u8_t& color = _color_null)
 {
-    u32 index_offset = (u32)mesh.vertex_count;
-        
+    u16 index_offset = (u16)mesh.vertex_count;
+
     for (u32 i = 0; i < MELT_ARRAY_LENGTH(_voxel_cube_vertices); ++i)
     {
         vec3_t vertex = _vec3_add(_vec3_mul(half_voxel_size, _voxel_cube_vertices[i]), voxel_center);
         mesh.vertices[mesh.vertex_count++] = vertex;
+        if (!_uvec3_equals(color, _color_null))
+            mesh.vertices[mesh.vertex_count++] = _vec3_div(_vec3_init(color), 255.0f);
     }
 
     while (box_type_flags != MELT_OCCLUDER_BOX_TYPE_NONE)
     {
-        const u32* indices = nullptr;
+        const u16* indices = nullptr;
         u32 indices_length = 0;
 
         melt_occluder_box_type_t selected_type = _select_voxel_indices(box_type_flags, indices, indices_length);
@@ -1308,39 +1311,11 @@ static void _add_voxel_to_mesh(vec3_t voxel_center, vec3_t half_voxel_size, melt
 }
 
 #if defined(MELT_DEBUG)
-static void _add_voxel_with_color_to_mesh(vec3_t voxel_center, vec3_t half_voxel_size, melt_mesh_t& mesh, melt_occluder_box_type_flags_t box_type_flags = MELT_OCCLUDER_BOX_TYPE_REGULAR, const color_3u8_t& color = _blue_violet)
-{
-    u32 index_offset = mesh.vertex_count / 2;
-
-    for (u32 i = 0; i < MELT_ARRAY_LENGTH(_voxel_cube_vertices); ++i)
-    {
-        vec3_t vertex = _vec3_add(_vec3_mul(half_voxel_size, _voxel_cube_vertices[i]), voxel_center);
-        mesh.vertices[mesh.vertex_count++] = vertex;
-        mesh.vertices[mesh.vertex_count++] = _vec3_div(_vec3_init(color), 255.0f);
-    }
-
-    while (box_type_flags != MELT_OCCLUDER_BOX_TYPE_NONE)
-    {
-        const u32* indices = nullptr;
-        u32 indices_length = 0;
-
-        melt_occluder_box_type_t selected_type = _select_voxel_indices(box_type_flags, indices, indices_length);
-
-        MELT_ASSERT(indices && indices_length > 0);
-        for (u32 i = 0; i < indices_length; ++i)
-        {
-            mesh.indices[mesh.index_count++] = indices[i] + index_offset;
-        }
-
-        box_type_flags &= ~selected_type;
-    }
-}
-
 static void _add_voxel_set_to_mesh(const _voxel_t* voxel_set, const u32 voxel_set_count, const vec3_t& half_voxel_extent, melt_mesh_t& mesh)
 {
     for (u32 i = 0; i < voxel_set_count; ++i)
     {
-        _add_voxel_with_color_to_mesh(aabb_center(voxel_set[i].aabb), half_voxel_extent, mesh);
+        _add_voxel_to_mesh(aabb_center(voxel_set[i].aabb), half_voxel_extent, mesh);
     }
 }
 #endif
@@ -1409,8 +1384,6 @@ void melt_free_result(melt_result_t& result)
 int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_result)
 {
     MELT_ASSERT(params._start_canary == 0 && params._end_canary == 0 && "Make sure to memset params to 0 before use");
-
-    memset(&out_result, 0, sizeof(melt_result_t));
 
     vec3_t voxel_extent = _vec3_init(params.voxel_size, params.voxel_size, params.voxel_size);
     vec3_t half_voxel_extent = _vec3_mul(voxel_extent, 0.5f);
@@ -1550,9 +1523,11 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
         fill_pct += f32(max_extent.volume) / total_volume;
         volume += max_extent.volume;
     }
-    
+
+    memset(&out_result, 0, sizeof(melt_result_t));
+
     out_result.mesh.vertices = MELT_MALLOC(vec3_t, _vertex_count_per_aabb() * max_extent_count);
-    out_result.mesh.indices = MELT_MALLOC(u32, _index_count_per_aabb(params.box_type_flags) * max_extent_count);
+    out_result.mesh.indices = MELT_MALLOC(u16, _index_count_per_aabb(params.box_type_flags) * max_extent_count);
 
     for (u32 i = 0; i < max_extent_count; ++i)
     {
@@ -1571,7 +1546,7 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
 #if defined(MELT_DEBUG)
     if (params.debug.flags > 0)
     {
-        // _add_voxel_with_color_to_mesh(aabb_center(mesh_aabb), (mesh_aabb.max - mesh_aabb.min) * 0.5f, out_result.debug_mesh, _colors[0]);
+        // _add_voxel_to_mesh(aabb_center(mesh_aabb), (mesh_aabb.max - mesh_aabb.min) * 0.5f, out_result.debug_mesh, _colors[0]);
 
         if (params.debug.flags & MELT_DEBUG_TYPE_SHOW_OUTER)
         {
@@ -1613,7 +1588,7 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
                     params.debug.voxel_y < 0 ||
                     params.debug.voxel_z < 0)
                 {
-                    _add_voxel_with_color_to_mesh(_vec3_add(voxel_center, voxel_extent), half_voxel_extent, out_result.debug_mesh);
+                    _add_voxel_to_mesh(_vec3_add(voxel_center, voxel_extent), half_voxel_extent, out_result.debug_mesh);
                 }
             }
         }
@@ -1627,22 +1602,22 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
                     u32(params.debug.voxel_y) == min_distance.y &&
                     u32(params.debug.voxel_z) == min_distance.z)
                 {
-                    _add_voxel_with_color_to_mesh(_vec3_add(voxel_center, voxel_extent), half_voxel_extent, out_result.debug_mesh);
+                    _add_voxel_to_mesh(_vec3_add(voxel_center, voxel_extent), half_voxel_extent, out_result.debug_mesh);
 
                     for (u32 x = min_distance.x; x < min_distance.x + min_distance.dist.x; ++x)
                     {
                         vec3_t voxel_center_x = _vec3_add(mesh_aabb.min, _vec3_mul(_vec3_init(x, min_distance.y, min_distance.z), voxel_extent));
-                        _add_voxel_with_color_to_mesh(_vec3_add(voxel_center_x, voxel_extent), half_voxel_extent, out_result.debug_mesh);
+                        _add_voxel_to_mesh(_vec3_add(voxel_center_x, voxel_extent), half_voxel_extent, out_result.debug_mesh);
                     }
                     for (u32 y = min_distance.y; y < min_distance.y + min_distance.dist.y; ++y)
                     {
                         vec3_t voxel_center_y = _vec3_add(mesh_aabb.min, _vec3_mul(_vec3_init(min_distance.x, y, min_distance.z), voxel_extent));
-                        _add_voxel_with_color_to_mesh(_vec3_add(voxel_center_y, voxel_extent), half_voxel_extent, out_result.debug_mesh);
+                        _add_voxel_to_mesh(_vec3_add(voxel_center_y, voxel_extent), half_voxel_extent, out_result.debug_mesh);
                     }
                     for (u32 z = min_distance.z; z < min_distance.z + min_distance.dist.z; ++z)
                     {
                         vec3_t voxel_center_z = _vec3_add(mesh_aabb.min, _vec3_mul(_vec3_init(min_distance.x, min_distance.y, z), voxel_extent));
-                        _add_voxel_with_color_to_mesh(_vec3_add(voxel_center_z, voxel_extent), half_voxel_extent, out_result.debug_mesh);
+                        _add_voxel_to_mesh(_vec3_add(voxel_center_z, voxel_extent), half_voxel_extent, out_result.debug_mesh);
                     }
                 }
             }
@@ -1660,7 +1635,7 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
                         for (u32 z = min_distance.z; z < min_distance.z + max_extent.z; ++z)
                         {
                             vec3_t voxel_center = _vec3_add(mesh_aabb.min, _vec3_mul(_vec3_init(x, y, z), voxel_extent));
-                            _add_voxel_with_color_to_mesh(_vec3_add(voxel_center, voxel_extent), half_voxel_extent, out_result.debug_mesh);
+                            _add_voxel_to_mesh(_vec3_add(voxel_center, voxel_extent), half_voxel_extent, out_result.debug_mesh);
                         }
                     }
                 }
@@ -1668,6 +1643,9 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
         }
         if (params.debug.flags & MELT_DEBUG_TYPE_SHOW_RESULT)
         {
+            out_result.debug_mesh.vertices = MELT_MALLOC(vec3_t, _vertex_count_per_aabb() * max_extent_count);
+            out_result.debug_mesh.indices = MELT_MALLOC(u16, _index_count_per_aabb(params.box_type_flags) * max_extent_count);
+
             for (size_t i = 0; i < max_extent_count; ++i)
             {
                 const _max_extent_t& extent = max_extents[i];
@@ -1677,8 +1655,8 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
                     vec3_t voxel_position = _vec3_mul(_vec3_init(extent.position), voxel_extent);
                     vec3_t voxel_position_biased_to_center = _vec3_add(voxel_position, half_extent);
                     vec3_t aabb_center = _vec3_add(mesh_aabb.min, voxel_position_biased_to_center);
-                    static color_3u8_t color = _colors[i % MELT_ARRAY_LENGTH(_colors)];
-                    _add_voxel_with_color_to_mesh(_vec3_add(aabb_center, half_voxel_extent), half_extent, out_result.debug_mesh, params.box_type_flags, color);
+                    color_3u8_t color = _colors[i % MELT_ARRAY_LENGTH(_colors)];
+                    _add_voxel_to_mesh(_vec3_add(aabb_center, half_voxel_extent), half_extent, out_result.debug_mesh, params.box_type_flags, color);
                 }
             }
         }

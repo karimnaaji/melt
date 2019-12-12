@@ -9,18 +9,18 @@
 
 #include <math.h>
 
-#define FABS(x) ((float)fabs(x)) 
-#define USE_EPSILON_TEST TRUE  
+#define FABS(x) ((float)fabs(x))
+#define USE_EPSILON_TEST TRUE
 #define EPSILON 0.000001
 #define CROSS(dest,v1,v2)                      \
               dest[0]=v1[1]*v2[2]-v1[2]*v2[1]; \
               dest[1]=v1[2]*v2[0]-v1[0]*v2[2]; \
               dest[2]=v1[0]*v2[1]-v1[1]*v2[0];
 #define DOT(v1,v2) (v1[0]*v2[0]+v1[1]*v2[1]+v1[2]*v2[2])
-#define SUB(dest,v1,v2) dest[0]=v1[0]-v2[0]; dest[1]=v1[1]-v2[1]; dest[2]=v1[2]-v2[2]; 
+#define SUB(dest,v1,v2) dest[0]=v1[0]-v2[0]; dest[1]=v1[1]-v2[1]; dest[2]=v1[2]-v2[2];
 #define ADD(dest,v1,v2) dest[0]=v1[0]+v2[0]; dest[1]=v1[1]+v2[1]; dest[2]=v1[2]+v2[2];
 #define MULT(dest,v,factor) dest[0]=factor*v[0]; dest[1]=factor*v[1]; dest[2]=factor*v[2];
-#define SET(dest,src) dest[0]=src[0]; dest[1]=src[1]; dest[2]=src[2]; 
+#define SET(dest,src) dest[0]=src[0]; dest[1]=src[1]; dest[2]=src[2];
 #define SORT(a,b) \
     if(a>b)       \
     {             \
@@ -84,7 +84,7 @@
         {                                               \
             if(e<=0 && e>=f) return 1;                  \
         }                                               \
-    }                                
+    }
 
 #define EDGE_AGAINST_TRI_EDGES(V0,V1,U0,U1,U2)   \
 {                                                \
@@ -135,7 +135,7 @@ int coplanar_tri_tri(float N[3],float V0[3],float V1[3],float V2[3], float U0[3]
     A[2]=fabs(N[2]);
     if(A[0]>A[1])
     {
-        if(A[0]>A[2])  
+        if(A[0]>A[2])
         {
             i0=1;      /* A[0] is greatest */
             i1=2;
@@ -151,20 +151,20 @@ int coplanar_tri_tri(float N[3],float V0[3],float V1[3],float V2[3], float U0[3]
         if(A[2]>A[1])
         {
             i0=0;      /* A[2] is greatest */
-            i1=1;                                           
+            i1=1;
         }
         else
         {
             i0=0;      /* A[1] is greatest */
             i1=2;
         }
-    }               
-                
+    }
+
     /* test all edges of triangle 1 against the edges of triangle 2 */
     EDGE_AGAINST_TRI_EDGES(V0,V1,U0,U1,U2);
     EDGE_AGAINST_TRI_EDGES(V1,V2,U0,U1,U2);
     EDGE_AGAINST_TRI_EDGES(V2,V0,U0,U1,U2);
-                
+
     /* finally, test if tri1 is totally contained in tri2 or vice versa */
     POINT_IN_TRI(V0,U0,U1,U2);
     POINT_IN_TRI(U0,V0,V1,V2);
@@ -275,30 +275,30 @@ static bool LoadModelMesh(const char* model_path, melt_params_t& melt_params)
     bool obj_parsing_res = tinyobj::LoadObj(shapes, materials, error, model_path, NULL);
 
     if (!error.empty() || !obj_parsing_res) return false;
-    
+
     MELT_FREE(melt_params.mesh.vertices);
     MELT_FREE(melt_params.mesh.indices);
     melt_params.mesh.vertex_count = 0;
     melt_params.mesh.index_count = 0;
-    
+
     for (size_t i = 0; i < shapes.size(); i++)
     {
         for (size_t f = 0; f < shapes[i].mesh.indices.size(); f++)
             ++melt_params.mesh.index_count;
-        
+
         for (size_t v = 0; v < shapes[i].mesh.positions.size() / 3; v++)
             ++melt_params.mesh.vertex_count;
     }
-    
-    melt_params.mesh.vertices = MELT_MALLOC(melt_vec3_t, melt_params.mesh.vertex_count);
-    melt_params.mesh.indices = MELT_MALLOC(u32, melt_params.mesh.index_count);
 
-    for (size_t i = 0; i < shapes.size(); i++) 
+    melt_params.mesh.vertices = MELT_MALLOC(melt_vec3_t, melt_params.mesh.vertex_count);
+    melt_params.mesh.indices = MELT_MALLOC(u16, melt_params.mesh.index_count);
+
+    for (size_t i = 0; i < shapes.size(); i++)
     {
-        for (size_t f = 0; f < shapes[i].mesh.indices.size(); f++) 
+        for (size_t f = 0; f < shapes[i].mesh.indices.size(); f++)
             melt_params.mesh.indices[f] = shapes[i].mesh.indices[f];
 
-        for (size_t v = 0; v < shapes[i].mesh.positions.size() / 3; v++) 
+        for (size_t v = 0; v < shapes[i].mesh.positions.size() / 3; v++)
         {
             melt_params.mesh.vertices[v].x = shapes[i].mesh.positions[3 * v + 0];
             melt_params.mesh.vertices[v].y = shapes[i].mesh.positions[3 * v + 1];
@@ -357,7 +357,7 @@ bool EnsureMeshExclusive(const melt_mesh_t& mesh0, const melt_mesh_t& mesh1)
     return true;
 }
 
-TEST_CASE("melt.bunny", "") 
+TEST_CASE("melt.bunny", "")
 {
     melt_params_t params;
     memset(&params, 0, sizeof(melt_params_t));
@@ -370,14 +370,16 @@ TEST_CASE("melt.bunny", "")
     REQUIRE(LoadModelMesh("models/bunny.obj", params));
     REQUIRE(melt_generate_occluder(params, result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
+    melt_free_result(result);
 
     params.voxel_size = 0.05f;
     REQUIRE(!melt_generate_occluder(params, result));
-    
-    melt_free_result(result);
+
+    MELT_FREE(params.mesh.vertices);
+    MELT_FREE(params.mesh.indices);
 }
 
-TEST_CASE("melt.suzanne", "") 
+TEST_CASE("melt.suzanne", "")
 {
     melt_params_t params;
     memset(&params, 0, sizeof(melt_params_t));
@@ -391,14 +393,18 @@ TEST_CASE("melt.suzanne", "")
     REQUIRE(melt_generate_occluder(params, result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
 
+    melt_free_result(result);
+
     params.voxel_size = 0.15f;
     REQUIRE(melt_generate_occluder(params, result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
-    
+
     melt_free_result(result);
+    MELT_FREE(params.mesh.vertices);
+    MELT_FREE(params.mesh.indices);
 }
 
-TEST_CASE("melt.cube", "") 
+TEST_CASE("melt.cube", "")
 {
     melt_params_t params;
     memset(&params, 0, sizeof(melt_params_t));
@@ -411,11 +417,13 @@ TEST_CASE("melt.cube", "")
     REQUIRE(LoadModelMesh("models/cube.obj", params));
     REQUIRE(melt_generate_occluder(params, result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
-    
+
     melt_free_result(result);
+    MELT_FREE(params.mesh.vertices);
+    MELT_FREE(params.mesh.indices);
 }
 
-TEST_CASE("melt.sphere", "") 
+TEST_CASE("melt.sphere", "")
 {
     melt_params_t params;
     memset(&params, 0, sizeof(melt_params_t));
@@ -428,11 +436,13 @@ TEST_CASE("melt.sphere", "")
     REQUIRE(LoadModelMesh("models/sphere.obj", params));
     REQUIRE(melt_generate_occluder(params, result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
-    
+
     melt_free_result(result);
+    MELT_FREE(params.mesh.vertices);
+    MELT_FREE(params.mesh.indices);
 }
 
-TEST_CASE("melt.teapot", "") 
+TEST_CASE("melt.teapot", "")
 {
     melt_params_t params;
     memset(&params, 0, sizeof(melt_params_t));
@@ -448,11 +458,13 @@ TEST_CASE("melt.teapot", "")
     params.voxel_size = 0.5f;
     REQUIRE(melt_generate_occluder(params, result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
-    
+
     melt_free_result(result);
+    MELT_FREE(params.mesh.vertices);
+    MELT_FREE(params.mesh.indices);
 }
 
-TEST_CASE("melt.column", "") 
+TEST_CASE("melt.column", "")
 {
     melt_params_t params;
     memset(&params, 0, sizeof(melt_params_t));
@@ -465,6 +477,8 @@ TEST_CASE("melt.column", "")
     REQUIRE(LoadModelMesh("models/column.obj", params));
     REQUIRE(melt_generate_occluder(params, result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
-    
+
     melt_free_result(result);
+    MELT_FREE(params.mesh.vertices);
+    MELT_FREE(params.mesh.indices);
 }
