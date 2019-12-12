@@ -276,19 +276,33 @@ static bool LoadModelMesh(const char* model_path, melt_params_t& melt_params)
 
     if (!error.empty() || !obj_parsing_res) return false;
     
-    melt_params.mesh.vertices.clear();
-    melt_params.mesh.indices.clear();
+    MELT_FREE(melt_params.mesh.vertices);
+    MELT_FREE(melt_params.mesh.indices);
+    melt_params.mesh.vertex_count = 0;
+    melt_params.mesh.index_count = 0;
+    
+    for (size_t i = 0; i < shapes.size(); i++)
+    {
+        for (size_t f = 0; f < shapes[i].mesh.indices.size(); f++)
+            ++melt_params.mesh.index_count;
+        
+        for (size_t v = 0; v < shapes[i].mesh.positions.size() / 3; v++)
+            ++melt_params.mesh.vertex_count;
+    }
+    
+    melt_params.mesh.vertices = MELT_MALLOC(melt_vec3_t, melt_params.mesh.vertex_count);
+    melt_params.mesh.indices = MELT_MALLOC(u32, melt_params.mesh.index_count);
+
     for (size_t i = 0; i < shapes.size(); i++) 
     {
         for (size_t f = 0; f < shapes[i].mesh.indices.size(); f++) 
-            melt_params.mesh.indices.push_back(shapes[i].mesh.indices[f]);
+            melt_params.mesh.indices[f] = shapes[i].mesh.indices[f];
 
         for (size_t v = 0; v < shapes[i].mesh.positions.size() / 3; v++) 
         {
-            melt_params.mesh.vertices.emplace_back();
-            melt_params.mesh.vertices.back().x = shapes[i].mesh.positions[3 * v + 0];
-            melt_params.mesh.vertices.back().y = shapes[i].mesh.positions[3 * v + 1];
-            melt_params.mesh.vertices.back().z = shapes[i].mesh.positions[3 * v + 2];
+            melt_params.mesh.vertices[v].x = shapes[i].mesh.positions[3 * v + 0];
+            melt_params.mesh.vertices[v].y = shapes[i].mesh.positions[3 * v + 1];
+            melt_params.mesh.vertices[v].z = shapes[i].mesh.positions[3 * v + 2];
         }
     }
 
@@ -297,7 +311,7 @@ static bool LoadModelMesh(const char* model_path, melt_params_t& melt_params)
 
 bool EnsureMeshExclusive(const melt_mesh_t& mesh0, const melt_mesh_t& mesh1)
 {
-    for (u32 i = 0; i < mesh0.indices.size(); i += 3)
+    for (u32 i = 0; i < mesh0.index_count; i += 3)
     {
         float v0[3];
         float v1[3];
@@ -315,7 +329,7 @@ bool EnsureMeshExclusive(const melt_mesh_t& mesh0, const melt_mesh_t& mesh1)
 
         CROSS(normal, e1, e2);
 
-        for (u32 j = 0; j < mesh1.indices.size(); j += 3)
+        for (u32 j = 0; j < mesh1.index_count; j += 3)
         {
             float u0[3];
             float u1[3];
@@ -346,7 +360,7 @@ bool EnsureMeshExclusive(const melt_mesh_t& mesh0, const melt_mesh_t& mesh1)
 TEST_CASE("melt.bunny", "") 
 {
     melt_params_t params;
-    memset(&params.debug, 0, sizeof(melt_debug_params_t));
+    memset(&params, 0, sizeof(melt_params_t));
     params.voxel_size = 0.25f;
     params.fill_pct = 1.0f;
     params.box_type_flags = MELT_OCCLUDER_BOX_TYPE_REGULAR;
@@ -359,12 +373,14 @@ TEST_CASE("melt.bunny", "")
 
     params.voxel_size = 0.05f;
     REQUIRE(!melt_generate_occluder(params, result));
+    
+    melt_free_result(result);
 }
 
 TEST_CASE("melt.suzanne", "") 
 {
     melt_params_t params;
-    memset(&params.debug, 0, sizeof(melt_debug_params_t));
+    memset(&params, 0, sizeof(melt_params_t));
     params.voxel_size = 0.25f;
     params.fill_pct = 1.0f;
     params.box_type_flags = MELT_OCCLUDER_BOX_TYPE_REGULAR;
@@ -378,12 +394,14 @@ TEST_CASE("melt.suzanne", "")
     params.voxel_size = 0.15f;
     REQUIRE(melt_generate_occluder(params, result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
+    
+    melt_free_result(result);
 }
 
 TEST_CASE("melt.cube", "") 
 {
     melt_params_t params;
-    memset(&params.debug, 0, sizeof(melt_debug_params_t));
+    memset(&params, 0, sizeof(melt_params_t));
     params.voxel_size = 0.25f;
     params.fill_pct = 1.0f;
     params.box_type_flags = MELT_OCCLUDER_BOX_TYPE_REGULAR;
@@ -393,12 +411,14 @@ TEST_CASE("melt.cube", "")
     REQUIRE(LoadModelMesh("models/cube.obj", params));
     REQUIRE(melt_generate_occluder(params, result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
+    
+    melt_free_result(result);
 }
 
 TEST_CASE("melt.sphere", "") 
 {
     melt_params_t params;
-    memset(&params.debug, 0, sizeof(melt_debug_params_t));
+    memset(&params, 0, sizeof(melt_params_t));
     params.voxel_size = 0.25f;
     params.fill_pct = 1.0f;
     params.box_type_flags = MELT_OCCLUDER_BOX_TYPE_REGULAR;
@@ -408,12 +428,14 @@ TEST_CASE("melt.sphere", "")
     REQUIRE(LoadModelMesh("models/sphere.obj", params));
     REQUIRE(melt_generate_occluder(params, result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
+    
+    melt_free_result(result);
 }
 
 TEST_CASE("melt.teapot", "") 
 {
     melt_params_t params;
-    memset(&params.debug, 0, sizeof(melt_debug_params_t));
+    memset(&params, 0, sizeof(melt_params_t));
     params.voxel_size = 0.25f;
     params.fill_pct = 1.0f;
     params.box_type_flags = MELT_OCCLUDER_BOX_TYPE_REGULAR;
@@ -426,12 +448,14 @@ TEST_CASE("melt.teapot", "")
     params.voxel_size = 0.5f;
     REQUIRE(melt_generate_occluder(params, result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
+    
+    melt_free_result(result);
 }
 
 TEST_CASE("melt.column", "") 
 {
     melt_params_t params;
-    memset(&params.debug, 0, sizeof(melt_debug_params_t));
+    memset(&params, 0, sizeof(melt_params_t));
     params.voxel_size = 0.25f;
     params.fill_pct = 1.0f;
     params.box_type_flags = MELT_OCCLUDER_BOX_TYPE_REGULAR;
@@ -440,5 +464,7 @@ TEST_CASE("melt.column", "")
 
     REQUIRE(LoadModelMesh("models/column.obj", params));
     REQUIRE(melt_generate_occluder(params, result));
-    REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));  
+    REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
+    
+    melt_free_result(result);
 }

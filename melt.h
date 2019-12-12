@@ -25,7 +25,6 @@
 #ifndef MELT_H
 #define MELT_H
 
-#include <vector>
 #include <stdint.h>
 
 typedef struct
@@ -37,8 +36,10 @@ typedef struct
 
 typedef struct
 {
-    std::vector<melt_vec3_t> vertices;
-    std::vector<unsigned short> indices;
+    melt_vec3_t* vertices;
+    uint32_t* indices;
+    uint32_t vertex_count;
+    uint32_t index_count;
 }  melt_mesh_t;
 
 typedef enum melt_occluder_box_type_t
@@ -67,23 +68,23 @@ typedef int32_t melt_debug_type_flags_t;
 
 typedef struct
 {
-    uint32_t _start_canary;
     melt_debug_type_flags_t flags;
     int32_t voxel_x;
     int32_t voxel_y;
     int32_t voxel_z;
     int32_t extent_index;
     float voxelScale;
-    uint32_t _end_canary;
 } melt_debug_params_t;
 
 typedef struct
 {
+    uint32_t _start_canary;
     melt_mesh_t mesh;
     melt_occluder_box_type_flags_t box_type_flags;
     melt_debug_params_t debug;
     float voxel_size;
     float fill_pct;
+    uint32_t _end_canary;
 } melt_params_t;
 
 typedef struct
@@ -93,6 +94,8 @@ typedef struct
 } melt_result_t;
 
 int melt_generate_occluder(const melt_params_t& params, melt_result_t& result);
+
+void melt_free_result(melt_result_t& result);
 
 #ifndef MELT_ASSERT
 #define MELT_ASSERT(stmt) (void)(stmt)
@@ -120,15 +123,18 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& result);
 #endif // _MSC_VER
 
 #ifndef _MSC_VER
+#include <stdlib.h>
 #define MELT_ALLOCA(T, N) (T*)alloca(N * sizeof(T))
-#else
+#else // !_MSC_VER
 #include <malloc.h>
 #pragma warning(disable:6255)
 #define MELT_ALLOCA(T, N) (T*)_alloca(N * sizeof(T))
-#endif // !_MSC_VER
+#endif // _MSC_VER
 
-#include <math.h>  // fabsf
-#include <float.h> // FLT_MAX
+#include <math.h>   // fabsf
+#include <float.h>  // FLT_MAX
+#include <limits.h> // INT_MAX
+#include <string.h> // memset
 
 #define MELT_ARRAY_LENGTH(array) ((int)(sizeof(array) / sizeof(*array)))
 
@@ -296,7 +302,7 @@ static const color_3u8_t _colors[] =
     _floral_white,
 };
 
-static const u16 _voxel_cube_indices[36] =
+static const u32 _voxel_cube_indices[36] =
 {
     0, 1, 2,
     0, 2, 3,
@@ -312,7 +318,7 @@ static const u16 _voxel_cube_indices[36] =
     1, 6, 2,
 };
 
-static const u16 _voxel_cube_indices_sides[24] =
+static const u32 _voxel_cube_indices_sides[24] =
 {
     0, 1, 2,
     0, 2, 3,
@@ -324,7 +330,7 @@ static const u16 _voxel_cube_indices_sides[24] =
     0, 5, 1,
 };
 
-static const u16 _voxel_cube_indices_diagonals[12] =
+static const u32 _voxel_cube_indices_diagonals[12] =
 {
     0, 1, 6,
     0, 6, 7,
@@ -332,13 +338,13 @@ static const u16 _voxel_cube_indices_diagonals[12] =
     4, 2, 3,
 };
 
-static const u16 _voxel_cube_indices_bottom[6] =
+static const u32 _voxel_cube_indices_bottom[6] =
 {
     1, 5, 6,
     1, 6, 2,
 };
 
-static const u16 _voxel_cube_indices_top[6] =
+static const u32 _voxel_cube_indices_top[6] =
 {
     0, 7, 4,
     0, 3, 7,
@@ -763,7 +769,7 @@ static _aabb_t _generate_aabb(const melt_mesh_t& mesh)
     aabb.min = _vec3_init( FLT_MAX,  FLT_MAX,  FLT_MAX);
     aabb.max = _vec3_init(-FLT_MAX, -FLT_MAX, -FLT_MAX);
 
-    for (u32 i = 0; i < mesh.indices.size(); ++i)
+    for (u32 i = 0; i < mesh.index_count; ++i)
     {
         aabb.min = _vec3_min(aabb.min, mesh.vertices[mesh.indices[i]]);
         aabb.max = _vec3_max(aabb.max, mesh.vertices[mesh.indices[i]]);
@@ -1214,37 +1220,37 @@ static void _update_min_distance_field(const _context_t& context, const uvec3_t&
     MELT_PROFILE_END();
 }
 
-static melt_occluder_box_type_t _select_voxel_indices(melt_occluder_box_type_flags_t box_type_flags, const u16*& out_indices, u16& out_index_length)
+static melt_occluder_box_type_t _select_voxel_indices(melt_occluder_box_type_flags_t box_type_flags, const u32*& out_indices, u32& out_index_length)
 {
 #define CHECK_FLAG(flag) (box_type_flags & flag) == flag
 
     if (CHECK_FLAG(MELT_OCCLUDER_BOX_TYPE_REGULAR))
     {
-        out_indices = static_cast<const u16*>(_voxel_cube_indices);
+        out_indices = static_cast<const u32*>(_voxel_cube_indices);
         out_index_length = MELT_ARRAY_LENGTH(_voxel_cube_indices);
         return MELT_OCCLUDER_BOX_TYPE_REGULAR;
     }
     else if (CHECK_FLAG(MELT_OCCLUDER_BOX_TYPE_SIDES))
     {
-        out_indices = static_cast<const u16*>(_voxel_cube_indices_sides);
+        out_indices = static_cast<const u32*>(_voxel_cube_indices_sides);
         out_index_length = MELT_ARRAY_LENGTH(_voxel_cube_indices_sides);
         return MELT_OCCLUDER_BOX_TYPE_SIDES;
     }
     else if (CHECK_FLAG(MELT_OCCLUDER_BOX_TYPE_BOTTOM))
     {
-        out_indices = static_cast<const u16*>(_voxel_cube_indices_bottom);
+        out_indices = static_cast<const u32*>(_voxel_cube_indices_bottom);
         out_index_length = MELT_ARRAY_LENGTH(_voxel_cube_indices_bottom);
         return MELT_OCCLUDER_BOX_TYPE_BOTTOM;
     }
     else if (CHECK_FLAG(MELT_OCCLUDER_BOX_TYPE_TOP))
     {
-        out_indices = static_cast<const u16*>(_voxel_cube_indices_top);
+        out_indices = static_cast<const u32*>(_voxel_cube_indices_top);
         out_index_length = MELT_ARRAY_LENGTH(_voxel_cube_indices_top);
         return MELT_OCCLUDER_BOX_TYPE_TOP;
     }
     else if (CHECK_FLAG(MELT_OCCLUDER_BOX_TYPE_DIAGONALS))
     {
-        out_indices = static_cast<const u16*>(_voxel_cube_indices_diagonals);
+        out_indices = static_cast<const u32*>(_voxel_cube_indices_diagonals);
         out_index_length = MELT_ARRAY_LENGTH(_voxel_cube_indices_diagonals);
         return MELT_OCCLUDER_BOX_TYPE_DIAGONALS;
     }
@@ -1254,27 +1260,47 @@ static melt_occluder_box_type_t _select_voxel_indices(melt_occluder_box_type_fla
     return MELT_OCCLUDER_BOX_TYPE_NONE;
 }
 
+static u32 _index_count_per_aabb(melt_occluder_box_type_flags_t box_type_flags)
+{
+    u32 index_count = 0;
+    while (box_type_flags != MELT_OCCLUDER_BOX_TYPE_NONE)
+    {
+        const u32* indices = nullptr;
+        u32 indices_length = 0;
+        melt_occluder_box_type_t selected_type = _select_voxel_indices(box_type_flags, indices, indices_length);
+        MELT_ASSERT(indices && indices_length > 0);
+        index_count += indices_length;
+        box_type_flags &= ~selected_type;
+    }
+    return index_count;
+}
+
+static u32 _vertex_count_per_aabb()
+{
+    return MELT_ARRAY_LENGTH(_voxel_cube_vertices);
+}
+
 static void _add_voxel_to_mesh(vec3_t voxel_center, vec3_t half_voxel_size, melt_mesh_t& mesh, melt_occluder_box_type_flags_t box_type_flags)
 {
-    u16 index_offset = (u16)mesh.vertices.size();
+    u32 index_offset = (u32)mesh.vertex_count;
         
     for (u32 i = 0; i < MELT_ARRAY_LENGTH(_voxel_cube_vertices); ++i)
     {
         vec3_t vertex = _vec3_add(_vec3_mul(half_voxel_size, _voxel_cube_vertices[i]), voxel_center);
-        mesh.vertices.push_back(vertex);
+        mesh.vertices[mesh.vertex_count++] = vertex;
     }
 
     while (box_type_flags != MELT_OCCLUDER_BOX_TYPE_NONE)
     {
-        const u16* indices = nullptr;
-        u16 indices_length = 0;
+        const u32* indices = nullptr;
+        u32 indices_length = 0;
 
         melt_occluder_box_type_t selected_type = _select_voxel_indices(box_type_flags, indices, indices_length);
 
         MELT_ASSERT(indices && indices_length > 0);
         for (u32 i = 0; i < indices_length; ++i)
         {
-            mesh.indices.push_back(indices[i] + index_offset);
+            mesh.indices[mesh.index_count++] = indices[i] + index_offset;
         }
 
         box_type_flags &= ~selected_type;
@@ -1284,26 +1310,26 @@ static void _add_voxel_to_mesh(vec3_t voxel_center, vec3_t half_voxel_size, melt
 #if defined(MELT_DEBUG)
 static void _add_voxel_with_color_to_mesh(vec3_t voxel_center, vec3_t half_voxel_size, melt_mesh_t& mesh, melt_occluder_box_type_flags_t box_type_flags = MELT_OCCLUDER_BOX_TYPE_REGULAR, const color_3u8_t& color = _blue_violet)
 {
-    u16 index_offset = (u16)mesh.vertices.size() / 2;
+    u32 index_offset = mesh.vertex_count / 2;
 
     for (u32 i = 0; i < MELT_ARRAY_LENGTH(_voxel_cube_vertices); ++i)
     {
         vec3_t vertex = _vec3_add(_vec3_mul(half_voxel_size, _voxel_cube_vertices[i]), voxel_center);
-        mesh.vertices.push_back(vertex);
-        mesh.vertices.push_back(_vec3_div(_vec3_init(color), 255.0f));
+        mesh.vertices[mesh.vertex_count++] = vertex;
+        mesh.vertices[mesh.vertex_count++] = _vec3_div(_vec3_init(color), 255.0f);
     }
 
     while (box_type_flags != MELT_OCCLUDER_BOX_TYPE_NONE)
     {
-        const u16* indices = nullptr;
-        u16 indices_length = 0;
+        const u32* indices = nullptr;
+        u32 indices_length = 0;
 
         melt_occluder_box_type_t selected_type = _select_voxel_indices(box_type_flags, indices, indices_length);
 
         MELT_ASSERT(indices && indices_length > 0);
         for (u32 i = 0; i < indices_length; ++i)
         {
-            mesh.indices.push_back(indices[i] + index_offset);
+            mesh.indices[mesh.index_count++] = indices[i] + index_offset;
         }
 
         box_type_flags &= ~selected_type;
@@ -1372,12 +1398,19 @@ void _free_context(_context_t& context)
     MELT_FREE(context.voxel_set);
 }
 
+void melt_free_result(melt_result_t& result)
+{
+    MELT_FREE(result.mesh.vertices);
+    MELT_FREE(result.mesh.indices);
+    MELT_FREE(result.debug_mesh.vertices);
+    MELT_FREE(result.debug_mesh.indices);
+}
+
 int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_result)
 {
-    out_result.debug_mesh.vertices.clear();
-    out_result.debug_mesh.indices.clear();
-    out_result.mesh.vertices.clear();
-    out_result.mesh.indices.clear();
+    MELT_ASSERT(params._start_canary == 0 && params._end_canary == 0 && "Make sure to memset params to 0 before use");
+
+    memset(&out_result, 0, sizeof(melt_result_t));
 
     vec3_t voxel_extent = _vec3_init(params.voxel_size, params.voxel_size, params.voxel_size);
     vec3_t half_voxel_extent = _vec3_mul(voxel_extent, 0.5f);
@@ -1396,7 +1429,7 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
     _init_context(context, voxel_count);
 
     // Perform shell voxelization
-    for (u32 i = 0; i < params.mesh.indices.size(); i += 3)
+    for (u32 i = 0; i < params.mesh.index_count; i += 3)
     {
         MELT_PROFILE_BEGIN();
 
@@ -1517,6 +1550,9 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
         fill_pct += f32(max_extent.volume) / total_volume;
         volume += max_extent.volume;
     }
+    
+    out_result.mesh.vertices = MELT_MALLOC(vec3_t, _vertex_count_per_aabb() * max_extent_count);
+    out_result.mesh.indices = MELT_MALLOC(u32, _index_count_per_aabb(params.box_type_flags) * max_extent_count);
 
     for (u32 i = 0; i < max_extent_count; ++i)
     {
@@ -1533,8 +1569,6 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
     _debug_validate_max_extents(context, max_extents, max_extent_count);
 
 #if defined(MELT_DEBUG)
-    MELT_ASSERT(params.debug._start_canary == 0 && params.debug._end_canary == 0 && "Make sure to memset melt_debug_params_t to 0 before use");
-
     if (params.debug.flags > 0)
     {
         // _add_voxel_with_color_to_mesh(aabb_center(mesh_aabb), (mesh_aabb.max - mesh_aabb.min) * 0.5f, out_result.debug_mesh, _colors[0]);
