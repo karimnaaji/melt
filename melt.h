@@ -1283,14 +1283,14 @@ static u32 _vertex_count_per_aabb()
 
 static void _add_voxel_to_mesh(vec3_t voxel_center, vec3_t half_voxel_size, melt_mesh_t& mesh, melt_occluder_box_type_flags_t box_type_flags = MELT_OCCLUDER_BOX_TYPE_REGULAR, const color_3u8_t& color = _color_null)
 {
-    u16 index_offset = (u16)mesh.vertex_count;
+    bool has_color = !_uvec3_equals(color, _color_null);
+    u16 index_offset = (u16)(has_color ? mesh.vertex_count / 2 : mesh.vertex_count);
 
     for (u32 i = 0; i < MELT_ARRAY_LENGTH(_voxel_cube_vertices); ++i)
     {
         vec3_t vertex = _vec3_add(_vec3_mul(half_voxel_size, _voxel_cube_vertices[i]), voxel_center);
         mesh.vertices[mesh.vertex_count++] = vertex;
-        if (!_uvec3_equals(color, _color_null))
-            mesh.vertices[mesh.vertex_count++] = _vec3_div(_vec3_init(color), 255.0f);
+        if (has_color) mesh.vertices[mesh.vertex_count++] = _vec3_div(_vec3_init(color), 255.0f);
     }
 
     while (box_type_flags != MELT_OCCLUDER_BOX_TYPE_NONE)
@@ -1457,8 +1457,6 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
 
         MELT_PROFILE_END();
     }
-
-    _voxel_set_planes_t voxel_set_planes;
 
     // Generate a flat voxel list per plane (x,y), (x,z), (y,z)
     _generate_per_plane_voxel_set(context);
@@ -1659,6 +1657,9 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
                     _add_voxel_to_mesh(_vec3_add(aabb_center, half_voxel_extent), half_extent, out_result.debug_mesh, params.box_type_flags, color);
                 }
             }
+            
+            MELT_ASSERT(out_result.debug_mesh.vertex_count == _vertex_count_per_aabb() * max_extent_count * 2);
+            MELT_ASSERT(out_result.debug_mesh.index_count ==  _index_count_per_aabb(params.box_type_flags) * max_extent_count);
         }
     }
 #endif
