@@ -1643,7 +1643,7 @@ int melt_generate_occluder(const melt_params_t& params, melt_result_t& out_resul
         }
         if (params.debug.flags & MELT_DEBUG_TYPE_SHOW_RESULT)
         {
-            out_result.debug_mesh.vertices = MELT_MALLOC(vec3_t, _vertex_count_per_aabb() * max_extent_count);
+            out_result.debug_mesh.vertices = MELT_MALLOC(vec3_t, _vertex_count_per_aabb() * max_extent_count * 2);
             out_result.debug_mesh.indices = MELT_MALLOC(u16, _index_count_per_aabb(params.box_type_flags) * max_extent_count);
 
             for (size_t i = 0; i < max_extent_count; ++i)
