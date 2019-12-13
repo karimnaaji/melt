@@ -279,29 +279,21 @@ typedef struct
     u32 max_extents_count;
 } _context_t;
 
-static const color_3u8_t _color_null              = {   0,   0,   0 };
-static const color_3u8_t _color_blue_violet       = { 138,  43, 226 };
-static const color_3u8_t _color_dark_see_green    = { 143, 188, 143 };
-static const color_3u8_t _color_light_slated_gray = { 119, 136, 153 };
-static const color_3u8_t _color_powder_blue       = { 176, 224, 230 };
-static const color_3u8_t _color_spring_green      = {   0, 255, 127 };
-static const color_3u8_t _color_steel_blue        = {  70, 130, 180 };
-static const color_3u8_t _color_teal              = {   0, 128, 128 };
-static const color_3u8_t _color_whitesmoke        = { 245, 245, 245 };
-static const color_3u8_t _color_floral_white      = { 255, 250, 240 };
-static const color_3u8_t _color_light_pink        = { 255, 182, 193 };
+static const color_3u8_t _color_null       = {  0,   0,   0 };
+static const color_3u8_t _color_steel_blue = { 70, 130, 180 };
 
 static const color_3u8_t _colors[] =
 {
-    _color_whitesmoke,
-    _color_steel_blue,
-    _color_spring_green,
-    _color_teal,
-    _color_light_pink,
-    _color_powder_blue,
-    _color_light_slated_gray,
-    _color_dark_see_green,
-    _color_floral_white,
+    { 138,  43, 226 },
+    { 143, 188, 143 },
+    { 119, 136, 153 },
+    { 176, 224, 230 },
+    {   0, 255, 127 },
+    {  70, 130, 180 },
+    {   0, 128, 128 },
+    { 245, 245, 245 },
+    { 255, 250, 240 },
+    { 255, 182, 193 },
 };
 
 static const u16 _voxel_cube_indices[36] =
@@ -1281,7 +1273,7 @@ static u32 _vertex_count_per_aabb()
     return MELT_ARRAY_LENGTH(_voxel_cube_vertices);
 }
 
-static void _add_voxel_to_mesh(vec3_t voxel_center, vec3_t half_voxel_size, melt_mesh_t* mesh, melt_occluder_box_type_flags_t box_type_flags = MELT_OCCLUDER_BOX_TYPE_REGULAR, const color_3u8_t color = _color_null)
+static void _add_voxel_to_mesh_with_color(vec3_t voxel_center, vec3_t half_voxel_size, melt_mesh_t* mesh, melt_occluder_box_type_flags_t box_type_flags, const color_3u8_t color)
 {
     bool has_color = !_uvec3_equals(color, _color_null);
     u16 index_offset = (u16)(has_color ? mesh->vertex_count / 2 : mesh->vertex_count);
@@ -1310,12 +1302,17 @@ static void _add_voxel_to_mesh(vec3_t voxel_center, vec3_t half_voxel_size, melt
     }
 }
 
+static void _add_voxel_to_mesh(vec3_t voxel_center, vec3_t half_voxel_size, melt_mesh_t* mesh, melt_occluder_box_type_flags_t box_type_flags)
+{
+    _add_voxel_to_mesh_with_color(voxel_center, half_voxel_size, mesh, box_type_flags, _color_null);
+}
+
 #if defined(MELT_DEBUG)
 static void _add_voxel_set_to_mesh(const _voxel_t* voxel_set, const u32 voxel_set_count, vec3_t half_voxel_extent, melt_mesh_t* mesh)
 {
     for (u32 i = 0; i < voxel_set_count; ++i)
     {
-        _add_voxel_to_mesh(_aabb_center(voxel_set[i].aabb), half_voxel_extent, mesh);
+        _add_voxel_to_mesh_with_color(_aabb_center(voxel_set[i].aabb), half_voxel_extent, mesh, MELT_OCCLUDER_BOX_TYPE_REGULAR, _color_steel_blue);
     }
 }
 #endif
@@ -1586,7 +1583,8 @@ int melt_generate_occluder(melt_params_t params, melt_result_t* out_result)
                     params.debug.voxel_y < 0 ||
                     params.debug.voxel_z < 0)
                 {
-                    _add_voxel_to_mesh(_vec3_add(voxel_center, voxel_extent), half_voxel_extent, &out_result->debug_mesh);
+                    _add_voxel_to_mesh_with_color(_vec3_add(voxel_center, voxel_extent), half_voxel_extent, 
+                        &out_result->debug_mesh, MELT_OCCLUDER_BOX_TYPE_REGULAR, _color_steel_blue);
                 }
             }
         }
@@ -1600,22 +1598,26 @@ int melt_generate_occluder(melt_params_t params, melt_result_t* out_result)
                     (u32)params.debug.voxel_y == min_distance->y &&
                     (u32)params.debug.voxel_z == min_distance->z)
                 {
-                    _add_voxel_to_mesh(_vec3_add(voxel_center, voxel_extent), half_voxel_extent, &out_result->debug_mesh);
+                    _add_voxel_to_mesh_with_color(_vec3_add(voxel_center, voxel_extent), half_voxel_extent, &out_result->debug_mesh,
+                        MELT_OCCLUDER_BOX_TYPE_REGULAR, _color_steel_blue);
 
                     for (u32 x = min_distance->x; x < min_distance->x + min_distance->dist.x; ++x)
                     {
                         vec3_t voxel_center_x = _vec3_add(mesh_aabb.min, _vec3_mul(_vec3_init(x, min_distance->y, min_distance->z), voxel_extent));
-                        _add_voxel_to_mesh(_vec3_add(voxel_center_x, voxel_extent), half_voxel_extent, &out_result->debug_mesh);
+                        _add_voxel_to_mesh_with_color(_vec3_add(voxel_center_x, voxel_extent), half_voxel_extent, 
+                            &out_result->debug_mesh, MELT_OCCLUDER_BOX_TYPE_REGULAR, _color_steel_blue);
                     }
                     for (u32 y = min_distance->y; y < min_distance->y + min_distance->dist.y; ++y)
                     {
                         vec3_t voxel_center_y = _vec3_add(mesh_aabb.min, _vec3_mul(_vec3_init(min_distance->x, y, min_distance->z), voxel_extent));
-                        _add_voxel_to_mesh(_vec3_add(voxel_center_y, voxel_extent), half_voxel_extent, &out_result->debug_mesh);
+                        _add_voxel_to_mesh_with_color(_vec3_add(voxel_center_y, voxel_extent), half_voxel_extent, 
+                            &out_result->debug_mesh, MELT_OCCLUDER_BOX_TYPE_REGULAR, _color_steel_blue);
                     }
                     for (u32 z = min_distance->z; z < min_distance->z + min_distance->dist.z; ++z)
                     {
                         vec3_t voxel_center_z = _vec3_add(mesh_aabb.min, _vec3_mul(_vec3_init(min_distance->x, min_distance->y, z), voxel_extent));
-                        _add_voxel_to_mesh(_vec3_add(voxel_center_z, voxel_extent), half_voxel_extent, &out_result->debug_mesh);
+                        _add_voxel_to_mesh_with_color(_vec3_add(voxel_center_z, voxel_extent), half_voxel_extent, 
+                            &out_result->debug_mesh, MELT_OCCLUDER_BOX_TYPE_REGULAR, _color_steel_blue);
                     }
                 }
             }
@@ -1633,7 +1635,8 @@ int melt_generate_occluder(melt_params_t params, melt_result_t* out_result)
                         for (u32 z = min_distance->z; z < min_distance->z + max_extent.z; ++z)
                         {
                             vec3_t voxel_center = _vec3_add(mesh_aabb.min, _vec3_mul(_vec3_init(x, y, z), voxel_extent));
-                            _add_voxel_to_mesh(_vec3_add(voxel_center, voxel_extent), half_voxel_extent, &out_result->debug_mesh);
+                            _add_voxel_to_mesh_with_color(_vec3_add(voxel_center, voxel_extent), half_voxel_extent, &out_result->debug_mesh,
+                                MELT_OCCLUDER_BOX_TYPE_REGULAR, _color_steel_blue);
                         }
                     }
                 }
@@ -1654,7 +1657,7 @@ int melt_generate_occluder(melt_params_t params, melt_result_t* out_result)
                     vec3_t voxel_position_biased_to_center = _vec3_add(voxel_position, half_extent);
                     vec3_t aabb_center = _vec3_add(mesh_aabb.min, voxel_position_biased_to_center);
                     color_3u8_t color = _colors[i % MELT_ARRAY_LENGTH(_colors)];
-                    _add_voxel_to_mesh(_vec3_add(aabb_center, half_voxel_extent), half_extent, &out_result->debug_mesh, params.box_type_flags, color);
+                    _add_voxel_to_mesh_with_color(_vec3_add(aabb_center, half_voxel_extent), half_extent, &out_result->debug_mesh, params.box_type_flags, color);
                 }
             }
             
