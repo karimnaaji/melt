@@ -21,6 +21,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
+// This library generates conservative occluders from triangle meshes.
+//
+// How to use:
+//  In a single compilation unit define the following and include the library:
+//  #define MELT_IMPLEMENTATION
+//  #include melt.h
+//
+// A full description of the algorithm is available at:
+//  http://karim.naaji.fr/blog/2019/15.11.19.html
+//
+// Triangle box intersection algorithm by Tomas Akenine-Möller[1].
+//
+// References:
+//  [1] https://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/code/tribox_tam.pdf
+//  [2] https://research.nvidia.com/publication/occluder-simplification-using-planar-sections
+//  [3] http://fileadmin.cs.lth.se/graphics/research/papers/2005/cr/_conservative.pdf
+//
 
 #ifndef MELT_H
 #define MELT_H
@@ -707,7 +724,7 @@ static inline uvec3_t _unflatten_3d(uint32_t position, uvec3_t dimension)
 }
 
 static float _map_to_voxel_max_func(float value, float voxel_size)
-{    
+{
     float sign = value < 0.0f ? -1.0f : 1.0f;
     float result = value + sign * voxel_size * 0.5f;
     return ceilf(result / voxel_size) * voxel_size;
@@ -723,10 +740,10 @@ static vec3_t _map_to_voxel_max_bound(vec3_t position, float voxel_size)
 }
 
 static float _map_to_voxel_min_func(float value, float voxel_size)
-{ 
+{
     float sign = value < 0.0f ? -1.0f : 1.0f;
     float result = value + sign * voxel_size * 0.5f;
-    return floorf(result / voxel_size) * voxel_size;   
+    return floorf(result / voxel_size) * voxel_size;
 }
 
 static vec3_t _map_to_voxel_min_bound(vec3_t position, float voxel_size)
@@ -1097,7 +1114,7 @@ static void _debug_validate_min_distance_field(const _context_t* context)
             const uint32_t y = min_distance->y;
             const uint32_t z = min_distance->z;
             const uint32_t index = _flatten_3d(_uvec3_init(x, y, z), context->dimension);
-            for (uint32_t i = 0; i < context->voxel_set_count; ++i) 
+            for (uint32_t i = 0; i < context->voxel_set_count; ++i)
                 MELT_ASSERT(!_uvec3_equals(context->voxel_set[i].position, _uvec3_init(x, y, z)));
             MELT_ASSERT(_inner_voxel(context->voxel_field[index]));
         }
@@ -1582,7 +1599,7 @@ int melt_generate_occluder(melt_params_t params, melt_result_t* out_result)
                     params.debug.voxel_y < 0 ||
                     params.debug.voxel_z < 0)
                 {
-                    _add_voxel_to_mesh_with_color(_vec3_add(voxel_center, voxel_extent), half_voxel_extent, 
+                    _add_voxel_to_mesh_with_color(_vec3_add(voxel_center, voxel_extent), half_voxel_extent,
                         &out_result->debug_mesh, MELT_OCCLUDER_BOX_TYPE_REGULAR, _color_steel_blue);
                 }
             }
@@ -1603,19 +1620,19 @@ int melt_generate_occluder(melt_params_t params, melt_result_t* out_result)
                     for (uint32_t x = min_distance->x; x < min_distance->x + min_distance->dist.x; ++x)
                     {
                         vec3_t voxel_center_x = _vec3_add(mesh_aabb.min, _vec3_mul(_vec3_init(x, min_distance->y, min_distance->z), voxel_extent));
-                        _add_voxel_to_mesh_with_color(_vec3_add(voxel_center_x, voxel_extent), half_voxel_extent, 
+                        _add_voxel_to_mesh_with_color(_vec3_add(voxel_center_x, voxel_extent), half_voxel_extent,
                             &out_result->debug_mesh, MELT_OCCLUDER_BOX_TYPE_REGULAR, _color_steel_blue);
                     }
                     for (uint32_t y = min_distance->y; y < min_distance->y + min_distance->dist.y; ++y)
                     {
                         vec3_t voxel_center_y = _vec3_add(mesh_aabb.min, _vec3_mul(_vec3_init(min_distance->x, y, min_distance->z), voxel_extent));
-                        _add_voxel_to_mesh_with_color(_vec3_add(voxel_center_y, voxel_extent), half_voxel_extent, 
+                        _add_voxel_to_mesh_with_color(_vec3_add(voxel_center_y, voxel_extent), half_voxel_extent,
                             &out_result->debug_mesh, MELT_OCCLUDER_BOX_TYPE_REGULAR, _color_steel_blue);
                     }
                     for (uint32_t z = min_distance->z; z < min_distance->z + min_distance->dist.z; ++z)
                     {
                         vec3_t voxel_center_z = _vec3_add(mesh_aabb.min, _vec3_mul(_vec3_init(min_distance->x, min_distance->y, z), voxel_extent));
-                        _add_voxel_to_mesh_with_color(_vec3_add(voxel_center_z, voxel_extent), half_voxel_extent, 
+                        _add_voxel_to_mesh_with_color(_vec3_add(voxel_center_z, voxel_extent), half_voxel_extent,
                             &out_result->debug_mesh, MELT_OCCLUDER_BOX_TYPE_REGULAR, _color_steel_blue);
                     }
                 }
@@ -1659,7 +1676,7 @@ int melt_generate_occluder(melt_params_t params, melt_result_t* out_result)
                     _add_voxel_to_mesh_with_color(_vec3_add(aabb_center, half_voxel_extent), half_extent, &out_result->debug_mesh, params.box_type_flags, color);
                 }
             }
-            
+
             MELT_ASSERT(out_result->debug_mesh.vertex_count == _vertex_count_per_aabb() * max_extent_count * 2);
             MELT_ASSERT(out_result->debug_mesh.index_count ==  _index_count_per_aabb(params.box_type_flags) * max_extent_count);
         }
