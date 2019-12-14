@@ -11,6 +11,6 @@ endif()
 
 include_directories(${PROJECT_SOURCE_DIR})
 
-add_executable(compile-check melt.cpp)
+add_executable(compile-check melt.c)
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/tests)

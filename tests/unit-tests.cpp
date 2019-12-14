@@ -291,7 +291,7 @@ static bool LoadModelMesh(const char* model_path, melt_params_t& melt_params)
     }
 
     melt_params.mesh.vertices = MELT_MALLOC(melt_vec3_t, melt_params.mesh.vertex_count);
-    melt_params.mesh.indices = MELT_MALLOC(u16, melt_params.mesh.index_count);
+    melt_params.mesh.indices = MELT_MALLOC(uint16_t, melt_params.mesh.index_count);
 
     for (size_t i = 0; i < shapes.size(); i++)
     {
@@ -311,7 +311,7 @@ static bool LoadModelMesh(const char* model_path, melt_params_t& melt_params)
 
 bool EnsureMeshExclusive(const melt_mesh_t& mesh0, const melt_mesh_t& mesh1)
 {
-    for (u32 i = 0; i < mesh0.index_count; i += 3)
+    for (uint32_t i = 0; i < mesh0.index_count; i += 3)
     {
         float v0[3];
         float v1[3];
@@ -329,7 +329,7 @@ bool EnsureMeshExclusive(const melt_mesh_t& mesh0, const melt_mesh_t& mesh1)
 
         CROSS(normal, e1, e2);
 
-        for (u32 j = 0; j < mesh1.index_count; j += 3)
+        for (uint32_t j = 0; j < mesh1.index_count; j += 3)
         {
             float u0[3];
             float u1[3];
@@ -368,12 +368,12 @@ TEST_CASE("melt.bunny", "")
     melt_result_t result;
 
     REQUIRE(LoadModelMesh("models/bunny.obj", params));
-    REQUIRE(melt_generate_occluder(params, result));
+    REQUIRE(melt_generate_occluder(params, &result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
     melt_free_result(result);
 
     params.voxel_size = 0.05f;
-    REQUIRE(!melt_generate_occluder(params, result));
+    REQUIRE(!melt_generate_occluder(params, &result));
 
     MELT_FREE(params.mesh.vertices);
     MELT_FREE(params.mesh.indices);
@@ -390,13 +390,13 @@ TEST_CASE("melt.suzanne", "")
     melt_result_t result;
 
     REQUIRE(LoadModelMesh("models/suzanne.obj", params));
-    REQUIRE(melt_generate_occluder(params, result));
+    REQUIRE(melt_generate_occluder(params, &result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
 
     melt_free_result(result);
 
     params.voxel_size = 0.15f;
-    REQUIRE(melt_generate_occluder(params, result));
+    REQUIRE(melt_generate_occluder(params, &result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
 
     melt_free_result(result);
@@ -415,7 +415,7 @@ TEST_CASE("melt.cube", "")
     melt_result_t result;
 
     REQUIRE(LoadModelMesh("models/cube.obj", params));
-    REQUIRE(melt_generate_occluder(params, result));
+    REQUIRE(melt_generate_occluder(params, &result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
 
     melt_free_result(result);
@@ -434,7 +434,7 @@ TEST_CASE("melt.sphere", "")
     melt_result_t result;
 
     REQUIRE(LoadModelMesh("models/sphere.obj", params));
-    REQUIRE(melt_generate_occluder(params, result));
+    REQUIRE(melt_generate_occluder(params, &result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
 
     melt_free_result(result);
@@ -453,10 +453,10 @@ TEST_CASE("melt.teapot", "")
     melt_result_t result;
 
     REQUIRE(LoadModelMesh("models/teapot.obj", params));
-    REQUIRE(!melt_generate_occluder(params, result));
+    REQUIRE(!melt_generate_occluder(params, &result));
 
     params.voxel_size = 0.5f;
-    REQUIRE(melt_generate_occluder(params, result));
+    REQUIRE(melt_generate_occluder(params, &result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
 
     melt_free_result(result);
@@ -475,7 +475,7 @@ TEST_CASE("melt.column", "")
     melt_result_t result;
 
     REQUIRE(LoadModelMesh("models/column.obj", params));
-    REQUIRE(melt_generate_occluder(params, result));
+    REQUIRE(melt_generate_occluder(params, &result));
     REQUIRE(EnsureMeshExclusive(params.mesh, result.mesh));
 
     melt_free_result(result);
