@@ -445,7 +445,7 @@ static float _vec3_dot(vec3_t a, vec3_t b)
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
-static uvec2_t _uvec2_new(uint32_t x, uint32_t y)
+static uvec2_t _uvec2_init(uint32_t x, uint32_t y)
 {
     uvec2_t v;
     v.x = x;
@@ -832,9 +832,9 @@ static void _generate_per_plane_voxel_set(_context_t* context)
         context->voxel_set_planes.z[i].voxel_count = 0;
     }
 
-    uvec2_t dim_yz = _uvec2_new(context->dimension.y, context->dimension.z);
-    uvec2_t dim_xz = _uvec2_new(context->dimension.x, context->dimension.z);
-    uvec2_t dim_xy = _uvec2_new(context->dimension.x, context->dimension.y);
+    uvec2_t dim_yz = _uvec2_init(context->dimension.y, context->dimension.z);
+    uvec2_t dim_xz = _uvec2_init(context->dimension.x, context->dimension.z);
+    uvec2_t dim_xy = _uvec2_init(context->dimension.x, context->dimension.y);
 
     for (uint32_t x = 0; x < context->dimension.x; ++x)
     {
@@ -846,9 +846,9 @@ static void _generate_per_plane_voxel_set(_context_t* context)
                 int32_t voxel_index = context->voxel_indices[_flatten_3d(position, context->dimension)];
                 if (voxel_index != -1)
                 {
-                    uint32_t index_yz = _flatten_2d(_uvec2_new(y, z), dim_yz);
-                    uint32_t index_xz = _flatten_2d(_uvec2_new(x, z), dim_xz);
-                    uint32_t index_xy = _flatten_2d(_uvec2_new(x, y), dim_xy);
+                    uint32_t index_yz = _flatten_2d(_uvec2_init(y, z), dim_yz);
+                    uint32_t index_xz = _flatten_2d(_uvec2_init(x, z), dim_xz);
+                    uint32_t index_xy = _flatten_2d(_uvec2_init(x, y), dim_xy);
 
                     _voxel_set_plane_t* voxels_x_planes = &context->voxel_set_planes.x[index_yz];
                     _voxel_set_plane_t* voxels_y_planes = &context->voxel_set_planes.y[index_xz];
@@ -879,8 +879,8 @@ static void _get_field(_context_t* context, uint32_t x, uint32_t y, uint32_t z, 
     out_status->clipped = false;
     out_status->inner = false;
 
-    uvec2_t dim_yz = _uvec2_new(context->dimension.y, context->dimension.z);
-    uint32_t index_yz = _flatten_2d(_uvec2_new(y, z), dim_yz);
+    uvec2_t dim_yz = _uvec2_init(context->dimension.y, context->dimension.z);
+    uint32_t index_yz = _flatten_2d(_uvec2_init(y, z), dim_yz);
     const _voxel_set_plane_t* voxels_x_plane = &context->voxel_set_planes.x[index_yz];
     for (uint32_t i = 0; i < voxels_x_plane->voxel_count; ++i)
     {
@@ -896,8 +896,8 @@ static void _get_field(_context_t* context, uint32_t x, uint32_t y, uint32_t z, 
         else
             out_min_distance->dist.x = 0;
     }
-    uvec2_t dim_xz = _uvec2_new(context->dimension.x, context->dimension.z);
-    uint32_t index_xz = _flatten_2d(_uvec2_new(x, z), dim_xz);
+    uvec2_t dim_xz = _uvec2_init(context->dimension.x, context->dimension.z);
+    uint32_t index_xz = _flatten_2d(_uvec2_init(x, z), dim_xz);
     const _voxel_set_plane_t* voxels_y_plane = &context->voxel_set_planes.y[index_xz];
     for (uint32_t i = 0; i < voxels_y_plane->voxel_count; ++i)
     {
@@ -913,8 +913,8 @@ static void _get_field(_context_t* context, uint32_t x, uint32_t y, uint32_t z, 
         else
             out_min_distance->dist.y = 0;
     }
-    uvec2_t dim_xy = _uvec2_new(context->dimension.x, context->dimension.y);
-    uint32_t index_xy = _flatten_2d(_uvec2_new(x, y), dim_xy);
+    uvec2_t dim_xy = _uvec2_init(context->dimension.x, context->dimension.y);
+    uint32_t index_xy = _flatten_2d(_uvec2_init(x, y), dim_xy);
     const _voxel_set_plane_t* voxels_z_plane = &context->voxel_set_planes.z[index_xy];
     for (uint32_t i = 0; i < voxels_z_plane->voxel_count; ++i)
     {
@@ -979,7 +979,7 @@ static uvec3_t _get_max_aabb_extent(const _context_t* context, const _min_distan
 
         const _min_distance_t* sample_min_distance = &context->min_distance_field[z_slice_index];
 
-        uvec2_t max_extent = _uvec2_new(sample_min_distance->dist.x, sample_min_distance->dist.y);
+        uvec2_t max_extent = _uvec2_init(sample_min_distance->dist.x, sample_min_distance->dist.y);
 
         uint32_t x = sample_min_distance->x + 1;
         uint32_t y = sample_min_distance->y + 1;
@@ -1008,7 +1008,7 @@ static uvec3_t _get_max_aabb_extent(const _context_t* context, const _min_distan
         max_aabb_extents[max_aabb_extents_count++] = max_extent;
     }
 
-    uvec2_t min_extent = _uvec2_new(UINT_MAX, UINT_MAX);
+    uvec2_t min_extent = _uvec2_init(UINT_MAX, UINT_MAX);
 
     uint32_t z_slice = 1;
     uint32_t max_volume = 0;
@@ -1567,19 +1567,19 @@ int melt_generate_occluder(melt_params_t params, melt_result_t* out_result)
         {
             if (params.debug.voxel_y > 0 && params.debug.voxel_z > 0)
             {
-                uint32_t index = _flatten_2d(_uvec2_new(params.debug.voxel_y, params.debug.voxel_z), _uvec2_new(context.dimension.y, context.dimension.z));
+                uint32_t index = _flatten_2d(_uvec2_init(params.debug.voxel_y, params.debug.voxel_z), _uvec2_init(context.dimension.y, context.dimension.z));
                 const _voxel_set_plane_t* voxels_x = &context.voxel_set_planes.x[index];
                 _add_voxel_set_to_mesh(voxels_x->voxels, voxels_x->voxel_count, _vec3_mulf(half_voxel_extent, params.debug.voxelScale), &out_result->debug_mesh);
             }
             if (params.debug.voxel_x > 0 && params.debug.voxel_z > 0)
             {
-                uint32_t index = _flatten_2d(_uvec2_new(params.debug.voxel_x, params.debug.voxel_z), _uvec2_new(context.dimension.x, context.dimension.z));
+                uint32_t index = _flatten_2d(_uvec2_init(params.debug.voxel_x, params.debug.voxel_z), _uvec2_init(context.dimension.x, context.dimension.z));
                 const _voxel_set_plane_t* voxels_y = &context.voxel_set_planes.y[index];
                 _add_voxel_set_to_mesh(voxels_y->voxels, voxels_y->voxel_count, _vec3_mulf(half_voxel_extent, params.debug.voxelScale), &out_result->debug_mesh);
             }
             if (params.debug.voxel_x > 0 && params.debug.voxel_y > 0)
             {
-                uint32_t index = _flatten_2d(_uvec2_new(params.debug.voxel_x, params.debug.voxel_y), _uvec2_new(context.dimension.x, context.dimension.y));
+                uint32_t index = _flatten_2d(_uvec2_init(params.debug.voxel_x, params.debug.voxel_y), _uvec2_init(context.dimension.x, context.dimension.y));
                 const _voxel_set_plane_t* voxels_z = &context.voxel_set_planes.z[index];
                 _add_voxel_set_to_mesh(voxels_z->voxels, voxels_z->voxel_count, _vec3_mulf(half_voxel_extent, params.debug.voxelScale), &out_result->debug_mesh);
             }
